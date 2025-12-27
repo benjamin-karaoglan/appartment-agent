@@ -1,0 +1,52 @@
+{
+  // Auto-save for hot reload
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 1000,
+
+  // Exclude build directories from file watcher
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/venv/**": true,
+    "**/.venv/**": true,
+    "**/dist/**": true,
+    "**/build/**": true
+  },
+
+  // Python configuration
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/bin/python",
+  "python.formatting.provider": "black",
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Enabled": true,
+
+  // TypeScript/JavaScript configuration
+  "typescript.preferences.importModuleSpecifier": "relative",
+  "javascript.preferences.importModuleSpecifier": "relative",
+
+  // Editor configuration
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+
+  // File associations
+  "files.associations": {
+    "*.css": "tailwindcss",
+    "docker-compose*.yml": "dockercompose"
+  },
+
+  // Terminal configuration for Docker
+  "terminal.integrated.env.osx": {
+    "COMPOSE_DOCKER_CLI_BUILD": "1",
+    "DOCKER_BUILDKIT": "1"
+  },
+  "terminal.integrated.env.linux": {
+    "COMPOSE_DOCKER_CLI_BUILD": "1",
+    "DOCKER_BUILDKIT": "1"
+  }
+}

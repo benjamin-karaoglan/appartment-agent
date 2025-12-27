@@ -45,12 +45,14 @@ dist
 .env.production.local
 
 # IDEs
-.vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+
+# VS Code (keep settings for hot-reload configuration)
+# .vscode/ - Commented out to track settings.json
 
 # Database
 *.db

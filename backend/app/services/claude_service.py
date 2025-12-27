@@ -1,19 +1,24 @@
 """
-Claude AI service for document analysis and insights.
+Claude AI service for document analysis and insights with comprehensive logging.
 """
 
 import anthropic
+import logging
 from typing import Dict, Any, List
 import json
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class ClaudeService:
     """Service for interacting with Claude AI API."""
 
     def __init__(self):
+        logger.info("Initializing ClaudeService")
         self.client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         self.model = settings.ANTHROPIC_MODEL
+        logger.info(f"Using Claude model: {self.model}")
 
     async def analyze_pvag_document(self, document_text: str) -> Dict[str, Any]:
         """
@@ -22,6 +27,8 @@ class ClaudeService:
         - Copropriété issues
         - Financial health indicators
         """
+        logger.info(f"Analyzing PV d'AG document, text length: {len(document_text)} characters")
+
         prompt = f"""
 Analyze the following French copropriété assembly meeting minutes (PV d'AG).
 
@@ -55,22 +62,32 @@ Provide your analysis in JSON format with the following structure:
 }}
 """
 
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        try:
+            logger.debug("Sending request to Claude API")
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}]
+            )
 
-        response_text = message.content[0].text
-        # Extract JSON from response (handle markdown code blocks)
-        if "```json" in response_text:
-            json_str = response_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in response_text:
-            json_str = response_text.split("```")[1].split("```")[0].strip()
-        else:
-            json_str = response_text
+            response_text = message.content[0].text
+            logger.debug(f"Received response from Claude, length: {len(response_text)} characters")
 
-        return json.loads(json_str)
+            # Extract JSON from response (handle markdown code blocks)
+            if "```json" in response_text:
+                json_str = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                json_str = response_text.split("```")[1].split("```")[0].strip()
+            else:
+                json_str = response_text
+
+            result = json.loads(json_str)
+            logger.info("Successfully analyzed PV d'AG document")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error analyzing PV d'AG document: {e}", exc_info=True)
+            raise
 
     async def analyze_diagnostic_document(self, document_text: str) -> Dict[str, Any]:
         """
@@ -79,6 +96,8 @@ Provide your analysis in JSON format with the following structure:
         - Presence of hazardous materials
         - Renovation needs and estimated costs
         """
+        logger.info(f"Analyzing diagnostic document, text length: {len(document_text)} characters")
+
         prompt = f"""
 Analyze the following French property diagnostic document.
 
@@ -109,27 +128,39 @@ Provide your analysis in JSON format with the following structure:
 }}
 """
 
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        try:
+            logger.debug("Sending diagnostic request to Claude API")
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}]
+            )
 
-        response_text = message.content[0].text
-        if "```json" in response_text:
-            json_str = response_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in response_text:
-            json_str = response_text.split("```")[1].split("```")[0].strip()
-        else:
-            json_str = response_text
+            response_text = message.content[0].text
+            logger.debug(f"Received diagnostic response, length: {len(response_text)} characters")
 
-        return json.loads(json_str)
+            if "```json" in response_text:
+                json_str = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                json_str = response_text.split("```")[1].split("```")[0].strip()
+            else:
+                json_str = response_text
+
+            result = json.loads(json_str)
+            logger.info("Successfully analyzed diagnostic document")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error analyzing diagnostic document: {e}", exc_info=True)
+            raise
 
     async def analyze_tax_charges_document(self, document_text: str, document_type: str) -> Dict[str, Any]:
         """
         Analyze tax (Taxe Foncière) or charges documents.
         Extract costs and calculate annual amounts.
         """
+        logger.info(f"Analyzing {document_type} document, text length: {len(document_text)} characters")
+
         prompt = f"""
 Analyze the following French property {document_type} document.
 
@@ -155,29 +186,40 @@ Provide your analysis in JSON format:
 }}
 """
 
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        try:
+            logger.debug(f"Sending {document_type} request to Claude API")
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}]
+            )
 
-        response_text = message.content[0].text
-        if "```json" in response_text:
-            json_str = response_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in response_text:
-            json_str = response_text.split("```")[1].split("```")[0].strip()
-        else:
-            json_str = response_text
+            response_text = message.content[0].text
+            logger.debug(f"Received {document_type} response, length: {len(response_text)} characters")
 
-        result = json.loads(json_str)
-        result["document_type"] = document_type
-        return result
+            if "```json" in response_text:
+                json_str = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                json_str = response_text.split("```")[1].split("```")[0].strip()
+            else:
+                json_str = response_text
+
+            result = json.loads(json_str)
+            result["document_type"] = document_type
+            logger.info(f"Successfully analyzed {document_type} document")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error analyzing {document_type} document: {e}", exc_info=True)
+            raise
 
     async def analyze_property_photos(self, image_data: bytes, transformation_request: str) -> Dict[str, Any]:
         """
         Analyze property photos and provide style transformation suggestions.
         """
         import base64
+
+        logger.info(f"Analyzing property photo, size: {len(image_data)} bytes, request: {transformation_request}")
 
         # Convert image to base64
         image_base64 = base64.b64encode(image_data).decode('utf-8')
@@ -193,35 +235,42 @@ Analyze this apartment photo and provide:
 Provide detailed, actionable recommendations.
 """
 
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": image_base64,
+        try:
+            logger.debug("Sending photo analysis request to Claude API")
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=4096,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image_base64,
+                                },
                             },
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ],
-                }
-            ],
-        )
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ],
+                    }
+                ],
+            )
 
-        response_text = message.content[0].text
-        return {
-            "analysis": response_text,
-            "transformation_request": transformation_request
-        }
+            response_text = message.content[0].text
+            logger.info("Successfully analyzed property photo")
+            return {
+                "analysis": response_text,
+                "transformation_request": transformation_request
+            }
+
+        except Exception as e:
+            logger.error(f"Error analyzing property photo: {e}", exc_info=True)
+            raise
 
     async def generate_property_report(
         self,
@@ -232,6 +281,8 @@ Provide detailed, actionable recommendations.
         """
         Generate a comprehensive property analysis report.
         """
+        logger.info("Generating comprehensive property report")
+
         prompt = f"""
 Generate a comprehensive property purchase decision report for a French apartment.
 
@@ -258,13 +309,21 @@ Create a detailed report with:
 Make the report clear, actionable, and data-driven.
 """
 
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=8192,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        try:
+            logger.debug("Sending property report generation request to Claude API")
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=8192,
+                messages=[{"role": "user", "content": prompt}]
+            )
 
-        return message.content[0].text
+            report = message.content[0].text
+            logger.info(f"Successfully generated property report, length: {len(report)} characters")
+            return report
+
+        except Exception as e:
+            logger.error(f"Error generating property report: {e}", exc_info=True)
+            raise
 
 
 # Singleton instance

@@ -6,9 +6,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
+import logging
 
 from app.core.config import settings
+from app.core.logging_config import setup_logging
 from app.api import properties, documents, analysis, users, photos
+
+# Initialize logging
+setup_logging(settings.LOG_LEVEL)
+logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
@@ -18,6 +24,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
+logger.info(f"Environment: {settings.ENVIRONMENT}")
 
 # CORS middleware
 app.add_middleware(

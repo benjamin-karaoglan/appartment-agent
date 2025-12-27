@@ -1,6 +1,5 @@
-"""Documents API routes with comprehensive logging and multimodal support."""
+"""Documents API routes."""
 
-import logging
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -19,11 +18,10 @@ from app.schemas.document import (
     TaxChargesAnalysisResponse
 )
 from app.services.claude_service import claude_service
-from app.services.document_service_v2 import DocumentParsingService  # Use new multimodal service
+from app.services.document_service import DocumentParsingService
 from app.models.document import DocumentSummary
 from app.schemas.document import DocumentSummaryResponse
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 doc_parser = DocumentParsingService()
 
@@ -63,13 +61,10 @@ async def upload_document(
     - taxe_fonciere: Property tax documents
     - charges: Condominium charges documents
     """
-    logger.info(f"Document upload request - user: {current_user}, category: {document_category}, "
-                f"subcategory: {document_subcategory}, property_id: {property_id}, filename: {file.filename}")
 
     # Validate file extension
     file_ext = os.path.splitext(file.filename)[1].lower()
     if file_ext not in settings.ALLOWED_EXTENSIONS:
-        logger.warning(f"Invalid file type attempted: {file_ext} for file {file.filename}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"File type {file_ext} not allowed"
@@ -78,72 +73,45 @@ async def upload_document(
     # Generate unique filename
     unique_filename = f"{uuid.uuid4()}{file_ext}"
     file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
-    logger.debug(f"Saving file to: {file_path}")
 
     # Save file
-    try:
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-        file_size = len(content)
-        logger.info(f"File saved successfully: {unique_filename}, size: {file_size} bytes")
-    except Exception as e:
-        logger.error(f"Failed to save file {file.filename}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save file: {str(e)}"
-        )
+    with open(file_path, "wb") as buffer:
+        content = await file.read()
+        buffer.write(content)
+
+    file_size = len(content)
 
     # Create document record
-    try:
-        document = Document(
-            user_id=int(current_user),
-            property_id=property_id,
-            filename=file.filename,
-            file_path=file_path,
-            file_type=file_ext,
-            document_category=document_category,
-            document_subcategory=document_subcategory,
-            file_size=file_size
-        )
+    document = Document(
+        user_id=int(current_user),
+        property_id=property_id,
+        filename=file.filename,
+        file_path=file_path,
+        file_type=file_ext,
+        document_category=document_category,
+        document_subcategory=document_subcategory,
+        file_size=file_size
+    )
 
-        db.add(document)
-        db.commit()
-        db.refresh(document)
-        logger.info(f"Document record created with ID: {document.id}")
-    except Exception as e:
-        logger.error(f"Failed to create document record: {e}", exc_info=True)
-        # Clean up file if database insert fails
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create document record: {str(e)}"
-        )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
 
     # Automatically parse document if requested
     if auto_parse and property_id:
-        logger.info(f"Auto-parsing enabled for document ID {document.id}")
         try:
             await doc_parser.parse_document(document, db)
 
             # Trigger aggregation if this is pv_ag or diags
             if document_category == "pv_ag":
-                logger.info(f"Triggering PV AG aggregation for property {property_id}")
                 await doc_parser.aggregate_pv_ag_summaries(property_id, db)
             elif document_category == "diags":
-                logger.info(f"Triggering diagnostic aggregation for property {property_id}")
                 await doc_parser.aggregate_diagnostic_summaries(property_id, db)
         except Exception as e:
-            logger.error(f"Auto-parse failed for document ID {document.id}: {e}", exc_info=True)
-            # Don't fail the upload if parsing fails - document is still saved
-    elif not property_id:
-        logger.info(f"Auto-parse skipped - no property_id provided")
-    else:
-        logger.info(f"Auto-parse disabled by request")
+            print(f"Warning: Auto-parse failed: {e}")
+            # Don't fail the upload if parsing fails
 
     db.refresh(document)
-    logger.info(f"Document upload completed successfully: ID {document.id}")
     return document
 
 

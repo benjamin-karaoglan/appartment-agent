@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Appartment Agent"
     VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
     # API
     API_V1_STR: str = "/api"
@@ -38,7 +39,7 @@ class Settings(BaseSettings):
 
     # Anthropic
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
-    ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
+    ANTHROPIC_MODEL: str = "claude-3-haiku-20240307"
 
     # File uploads
     UPLOAD_DIR: str = os.path.join(os.path.dirname(__file__), "../../../uploads")
@@ -49,6 +50,12 @@ class Settings(BaseSettings):
 
     # DVF Data
     DVF_DATA_DIR: str = os.path.join(os.path.dirname(__file__), "../../../data/dvf")
+
+    # Redis Cache
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
+    CACHE_TTL: int = 3600  # 1 hour cache TTL
 
     class Config:
         env_file = ".env"

@@ -6,7 +6,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
-import { Plus, Home, FileText, TrendingUp } from 'lucide-react';
+import { Plus, Home, FileText, TrendingUp, Trash2 } from 'lucide-react';
 import type { Property } from '@/types';
 
 function DashboardContent() {
@@ -14,6 +14,8 @@ function DashboardContent() {
   const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletePropertyId, setDeletePropertyId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadProperties();
@@ -21,12 +23,40 @@ function DashboardContent() {
 
   const loadProperties = async () => {
     try {
-      const response = await api.get('/properties/');
+      const response = await api.get('/api/properties/');
       setProperties(response.data);
     } catch (error) {
       console.error('Failed to load properties:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, propertyId: number) => {
+    e.stopPropagation(); // Prevent navigation to property detail
+    setDeletePropertyId(propertyId);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletePropertyId) return;
+
+    setDeleting(true);
+    try {
+      await api.delete(`/api/properties/${deletePropertyId}`);
+      // Reload properties list
+      await loadProperties();
+      setDeletePropertyId(null);
+    } catch (error) {
+      console.error('Failed to delete property:', error);
+      alert('Failed to delete property. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const cancelDelete = () => {
+    if (!deleting) {
+      setDeletePropertyId(null);
     }
   };
 
@@ -151,9 +181,16 @@ function DashboardContent() {
                     <div
                       key={property.id}
                       onClick={() => router.push(`/properties/${property.id}`)}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                      className="relative border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
                     >
-                      <h4 className="text-lg font-medium text-gray-900 mb-2">
+                      <button
+                        onClick={(e) => handleDeleteClick(e, property.id)}
+                        className="absolute top-2 right-2 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                        title="Delete property"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                      <h4 className="text-lg font-medium text-gray-900 mb-2 pr-8">
                         {property.address}
                       </h4>
                       <p className="text-sm text-gray-500 mb-2">
@@ -181,6 +218,60 @@ function DashboardContent() {
               )}
             </div>
           </div>
+
+          {/* Delete Confirmation Modal */}
+          {deletePropertyId && (
+            <div className="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+              <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                {/* Background overlay */}
+                <div
+                  className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+                  aria-hidden="true"
+                  onClick={cancelDelete}
+                ></div>
+
+                {/* Center modal */}
+                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+                {/* Modal panel */}
+                <div className="relative inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                  <div className="sm:flex sm:items-start">
+                    <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                      <Trash2 className="h-6 w-6 text-red-600" aria-hidden="true" />
+                    </div>
+                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                      <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                        Delete Property
+                      </h3>
+                      <div className="mt-2">
+                        <p className="text-sm text-gray-500">
+                          Are you sure you want to delete this property? This action cannot be undone. All associated documents, analyses, and photos will be permanently deleted.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={confirmDelete}
+                      className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {deleting ? 'Deleting...' : 'Delete'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={cancelDelete}
+                      className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

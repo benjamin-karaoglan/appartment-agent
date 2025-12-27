@@ -1,8 +1,8 @@
 """Property schemas for request/response validation."""
 
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import datetime
+from pydantic import BaseModel, field_validator
+from typing import Optional, Union
+from datetime import datetime, date
 
 
 class PropertyBase(BaseModel):
@@ -53,7 +53,7 @@ class PropertyResponse(PropertyBase):
 class DVFRecordResponse(BaseModel):
     """Schema for DVF record response."""
     id: int
-    sale_date: datetime
+    sale_date: Union[datetime, date]
     sale_price: float
     address: str
     postal_code: str
@@ -62,6 +62,15 @@ class DVFRecordResponse(BaseModel):
     surface_area: Optional[float] = None
     rooms: Optional[int] = None
     price_per_sqm: Optional[float] = None
+    is_outlier: Optional[bool] = False  # Flag for IQR outlier detection
+
+    @field_validator('sale_date', mode='before')
+    @classmethod
+    def convert_date_to_datetime(cls, v):
+        """Convert date to datetime for consistent API response."""
+        if isinstance(v, date) and not isinstance(v, datetime):
+            return datetime.combine(v, datetime.min.time())
+        return v
 
     class Config:
         from_attributes = True
@@ -72,7 +81,12 @@ class PriceAnalysisResponse(BaseModel):
     estimated_value: float
     price_per_sqm: float
     market_avg_price_per_sqm: float
+    market_median_price_per_sqm: Optional[float] = None
     price_deviation_percent: float
     comparable_sales: list[DVFRecordResponse]
     recommendation: str
     confidence_score: float
+    comparables_count: Optional[int] = None
+    market_trend_annual: Optional[float] = None
+    analysis_type: Optional[str] = None
+    trend_projection: Optional[dict] = None

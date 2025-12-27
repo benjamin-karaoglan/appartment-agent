@@ -19,9 +19,15 @@ class DocumentResponse(BaseModel):
     filename: str
     file_type: str
     document_category: str
+    document_subcategory: Optional[str] = None
+    document_date: Optional[datetime] = None
     is_analyzed: bool
     analysis_summary: Optional[str] = None
+    key_insights: Optional[List[str]] = None
+    estimated_annual_cost: Optional[float] = None
+    one_time_costs: Optional[List[Dict[str, Any]]] = None
     upload_date: datetime
+    parsed_at: Optional[datetime] = None
     file_size: int
 
     class Config:
@@ -62,3 +68,23 @@ class TaxChargesAnalysisResponse(BaseModel):
     annual_amount: float
     breakdown: Dict[str, float]
     summary: str
+
+
+class DocumentSummaryResponse(BaseModel):
+    """Schema for aggregated document summary response."""
+    id: int
+    property_id: int
+    category: str
+    summary: Optional[str] = None
+    key_findings: Optional[List[str]] = None
+    total_estimated_annual_cost: Optional[float] = None
+    total_one_time_costs: Optional[float] = None
+    cost_breakdown: Optional[Dict[str, float]] = None
+    copropriete_insights: Optional[Dict[str, Any]] = None
+    diagnostic_issues: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+    document_count: int
+
+    class Config:
+        from_attributes = True

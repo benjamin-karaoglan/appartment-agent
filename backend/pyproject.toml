@@ -1,0 +1,40 @@
+[project]
+name = "appartment-agent-backend"
+version = "1.0.0"
+description = "AI-powered apartment purchasing decision platform for France"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.104.1",
+    "uvicorn[standard]==0.24.0",
+    "sqlalchemy==2.0.23",
+    "psycopg2-binary==2.9.9",
+    "pydantic==2.5.0",
+    "pydantic-settings==2.1.0",
+    "python-multipart==0.0.6",
+    "python-jose[cryptography]==3.3.0",
+    "passlib[bcrypt]==1.7.4",
+    "anthropic>=0.39.0",
+    "python-dotenv==1.0.0",
+    "pandas==2.1.3",
+    "numpy==1.26.2",
+    "openpyxl==3.1.2",
+    "pypdf2==3.0.1",
+    "pymupdf>=1.23.0",
+    "pillow==10.1.0",
+    "httpx==0.25.2",
+    "alembic==1.13.0",
+    "redis==5.0.1",
+    "celery==5.3.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.25.0",
+]

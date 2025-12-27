@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
 import { api } from '@/lib/api';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Search } from 'lucide-react';
 import Link from 'next/link';
 
 interface PropertyFormData {
@@ -22,16 +22,76 @@ interface PropertyFormData {
   building_year?: number;
 }
 
+interface AddressSuggestion {
+  address: string;
+  postal_code: string;
+  city: string;
+  property_type: string;
+  count: number;
+}
+
 function NewPropertyContent() {
   const router = useRouter();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [addressQuery, setAddressQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<PropertyFormData>();
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Search addresses as user types
+  useEffect(() => {
+    const searchAddresses = async () => {
+      if (addressQuery.length < 2) {
+        setSuggestions([]);
+        return;
+      }
+
+      setLoadingSuggestions(true);
+      try {
+        const response = await api.get(`/api/properties/search-addresses?q=${encodeURIComponent(addressQuery)}&limit=15`);
+        setSuggestions(response.data);
+        setShowSuggestions(true);
+      } catch (err) {
+        console.error('Failed to search addresses:', err);
+        setSuggestions([]);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    };
+
+    const timeoutId = setTimeout(searchAddresses, 400);
+    return () => clearTimeout(timeoutId);
+  }, [addressQuery]);
+
+  const selectAddress = (suggestion: AddressSuggestion) => {
+    setValue('address', suggestion.address);
+    setValue('postal_code', suggestion.postal_code);
+    setValue('city', suggestion.city);
+    setValue('property_type', suggestion.property_type);
+    setValue('department', suggestion.postal_code.substring(0, 2));
+    setAddressQuery(suggestion.address);
+    setShowSuggestions(false);
+  };
 
   const onSubmit = async (data: PropertyFormData) => {
     setError('');
@@ -89,21 +149,63 @@ function NewPropertyContent() {
                   Property Location
                 </h3>
                 <div className="space-y-4">
-                  <div>
+                  <div className="relative" ref={suggestionsRef}>
                     <label htmlFor="address" className="block text-sm font-medium text-gray-700">
                       Address <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      id="address"
-                      type="text"
-                      {...register('address', {
-                        required: 'Address is required',
-                      })}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 text-gray-900 bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      placeholder="123 rue de la Paix"
-                    />
+                    <div className="relative mt-1">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <input
+                        id="address"
+                        type="text"
+                        value={addressQuery}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setAddressQuery(value);
+                          setValue('address', value);
+                        }}
+                        onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 text-gray-900 bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        placeholder="Start typing address... (e.g., 56 notre dame)"
+                        autoComplete="off"
+                      />
+                      <input type="hidden" {...register('address', { required: 'Address is required' })} />
+                      {loadingSuggestions && (
+                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                        </div>
+                      )}
+                    </div>
                     {errors.address && (
                       <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>
+                    )}
+
+                    {/* Suggestions dropdown */}
+                    {showSuggestions && suggestions.length > 0 && (
+                      <div className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                        {suggestions.map((suggestion, index) => (
+                          <div
+                            key={index}
+                            onClick={() => selectAddress(suggestion)}
+                            className="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-blue-50"
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-medium text-gray-900">{suggestion.address}</span>
+                              <span className="text-sm text-gray-500">
+                                {suggestion.city} {suggestion.postal_code} - {suggestion.property_type}
+                                <span className="ml-2 text-xs text-gray-400">({suggestion.count} sales)</span>
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {showSuggestions && addressQuery.length >= 2 && suggestions.length === 0 && !loadingSuggestions && (
+                      <div className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md py-3 px-4 text-sm text-gray-500">
+                        No addresses found in Paris. Try typing the street name (e.g., "notre dame des champs")
+                      </div>
                     )}
                   </div>
 
