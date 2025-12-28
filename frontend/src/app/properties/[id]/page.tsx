@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
+import InfoTooltip from '@/components/InfoTooltip';
+import MarketTrendChart from '@/components/MarketTrendChart';
 import { api } from '@/lib/api';
-import { ArrowLeft, TrendingUp, FileText, Upload, Loader2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, TrendingUp, FileText, Upload, Loader2, Trash2, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import type { Property } from '@/types';
 
@@ -24,6 +26,7 @@ function PropertyDetailContent() {
   const [showNeighboringSales, setShowNeighboringSales] = useState(false);
   const [excludedOutliers, setExcludedOutliers] = useState<Set<number>>(new Set());
   const [excludedNeighboringOutliers, setExcludedNeighboringOutliers] = useState<Set<number>>(new Set());
+  const [expandedSales, setExpandedSales] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     loadProperty();
@@ -90,6 +93,16 @@ function PropertyDetailContent() {
 
     // Recalculate analysis with new exclusions
     await recalculateAnalysis(newExcluded);
+  };
+
+  const toggleSaleExpansion = (index: number) => {
+    const newExpanded = new Set(expandedSales);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedSales(newExpanded);
   };
 
   const recalculateAnalysis = async (excluded: Set<number>) => {
@@ -312,41 +325,83 @@ function PropertyDetailContent() {
             <div className="bg-white shadow rounded-lg p-6">
               <h2 className="text-lg font-medium text-gray-900 mb-4">Price Analysis</h2>
               <div className="space-y-3">
-                <button
-                  onClick={() => analyzePrice('simple')}
-                  disabled={analyzing || !property.asking_price || !property.surface_area}
-                  className="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {analyzing ? (
-                    <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      <TrendingUp className="h-5 w-5 mr-2" />
-                      Simple Analysis
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => analyzePrice('simple')}
+                    disabled={analyzing || !property.asking_price || !property.surface_area}
+                    className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {analyzing ? (
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <TrendingUp className="h-5 w-5 mr-2" />
+                        Simple Analysis
+                      </>
+                    )}
+                  </button>
+                  <InfoTooltip
+                    title="Simple Analysis"
+                    content={
+                      <div className="space-y-2">
+                        <p><strong>What it does:</strong> Shows only sales at the exact same address (same building).</p>
+                        <p><strong>How it works:</strong></p>
+                        <ul className="list-disc pl-4 space-y-1 text-xs">
+                          <li>Finds all historical sales at your building number</li>
+                          <li>Groups multi-unit transactions correctly</li>
+                          <li>Detects and flags outliers using IQR method</li>
+                          <li>Calculates average market price per m²</li>
+                          <li>Uses raw historical prices (no time adjustment)</li>
+                        </ul>
+                        <p className="text-xs text-gray-600 mt-2">
+                          <strong>Best for:</strong> Buildings with recent sales history. Shows true transaction prices in your building.
+                        </p>
+                      </div>
+                    }
+                  />
+                </div>
 
-                <button
-                  onClick={() => analyzePrice('trend')}
-                  disabled={analyzing || !property.asking_price || !property.surface_area}
-                  className="w-full inline-flex items-center justify-center px-4 py-2 border border-blue-600 text-sm font-medium rounded-md text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {analyzing ? (
-                    <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      <TrendingUp className="h-5 w-5 mr-2" />
-                      Trend Analysis (2025 Projection)
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => analyzePrice('trend')}
+                    disabled={analyzing || !property.asking_price || !property.surface_area}
+                    className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-blue-600 text-sm font-medium rounded-md text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {analyzing ? (
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <TrendingUp className="h-5 w-5 mr-2" />
+                        Trend Analysis (2025 Projection)
+                      </>
+                    )}
+                  </button>
+                  <InfoTooltip
+                    title="Trend Analysis"
+                    content={
+                      <div className="space-y-2">
+                        <p><strong>What it does:</strong> Projects 2025 value using market trends from neighboring addresses.</p>
+                        <p><strong>How it works:</strong></p>
+                        <ul className="list-disc pl-4 space-y-1 text-xs">
+                          <li>Takes most recent sale at your exact address</li>
+                          <li>Analyzes sales from neighboring buildings (±2, ±4, ±6, etc.)</li>
+                          <li>Calculates year-over-year market trend</li>
+                          <li>Projects historical price forward to 2025</li>
+                          <li>Accounts for time and market evolution</li>
+                        </ul>
+                        <p className="text-xs text-gray-600 mt-2">
+                          <strong>Best for:</strong> Properties with older sales data. Estimates current value based on neighborhood trends.
+                        </p>
+                      </div>
+                    }
+                  />
+                </div>
 
                 <button
                   onClick={() => router.push(`/properties/${propertyId}/documents`)}
@@ -366,6 +421,13 @@ function PropertyDetailContent() {
               </div>
             </div>
           </div>
+
+          {/* Market Trend Visualization */}
+          {priceAnalysis && (
+            <div className="mb-8">
+              <MarketTrendChart propertyId={propertyId} />
+            </div>
+          )}
 
           {/* Price Analysis Results */}
           {priceAnalysis && (
@@ -578,49 +640,124 @@ function PropertyDetailContent() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {priceAnalysis.comparable_sales.map((sale: any, index: number) => (
-                      <tr
-                        key={index}
-                        className={`hover:bg-gray-50 ${sale.is_outlier ? 'bg-yellow-50' : ''} ${excludedOutliers.has(index) ? 'opacity-50' : ''}`}
-                      >
-                        <td className="px-3 py-4 whitespace-nowrap text-center">
-                          <input
-                            type="checkbox"
-                            checked={!excludedOutliers.has(index)}
-                            onChange={() => toggleOutlierInclusion(index)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
-                            title={sale.is_outlier ? 'Outlier detected (IQR method)' : 'Include in analysis'}
-                          />
-                          {sale.is_outlier && (
-                            <div className="text-xs text-yellow-600 mt-1">Outlier</div>
+                    {priceAnalysis.comparable_sales.map((sale: any, index: number) => {
+                      const isMultiUnit = sale.unit_count && sale.unit_count > 1;
+                      const isExpanded = expandedSales.has(index);
+                      // All sales from grouped view use total_* and grouped_* fields
+                      const displaySurface = sale.total_surface_area || sale.surface_area;
+                      const displayRooms = sale.total_rooms || sale.rooms;
+                      const displayPricePerSqm = sale.grouped_price_per_sqm || sale.price_per_sqm;
+
+                      return (
+                        <>
+                          <tr
+                            key={index}
+                            className={`hover:bg-gray-50 ${sale.is_outlier ? 'bg-yellow-50' : ''} ${excludedOutliers.has(index) ? 'opacity-50' : ''} ${isMultiUnit ? 'border-l-4 border-l-blue-500' : ''}`}
+                          >
+                            <td className="px-3 py-4 whitespace-nowrap text-center">
+                              <input
+                                type="checkbox"
+                                checked={!excludedOutliers.has(index)}
+                                onChange={() => toggleOutlierInclusion(index)}
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                                title={sale.is_outlier ? 'Outlier detected (IQR method)' : 'Include in analysis'}
+                              />
+                              {sale.is_outlier && (
+                                <div className="text-xs text-yellow-600 mt-1">Outlier</div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {new Date(sale.sale_date).toLocaleDateString('fr-FR')}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900">
+                              <div className="flex items-start gap-2">
+                                <div className="flex-1">
+                                  {sale.address || '-'}<br />
+                                  <span className="text-gray-500">{sale.city} {sale.postal_code}</span>
+                                </div>
+                                {isMultiUnit && (
+                                  <button
+                                    onClick={() => toggleSaleExpansion(index)}
+                                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100"
+                                    title="Multi-unit sale - click to see details"
+                                  >
+                                    <Building2 className="h-3 w-3" />
+                                    {sale.unit_count} units
+                                    {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {displaySurface?.toFixed(2)} m²
+                              {isMultiUnit && displayRooms && (
+                                <div className="text-xs text-gray-500">{displayRooms} rooms total</div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                              {new Intl.NumberFormat('fr-FR', {
+                                style: 'currency',
+                                currency: 'EUR',
+                                maximumFractionDigits: 0,
+                              }).format(sale.sale_price)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {new Intl.NumberFormat('fr-FR', {
+                                style: 'currency',
+                                currency: 'EUR',
+                                maximumFractionDigits: 0,
+                              }).format(displayPricePerSqm)}
+                              {isMultiUnit && (
+                                <div className="text-xs text-blue-600 font-medium">Grouped</div>
+                              )}
+                            </td>
+                          </tr>
+                          {/* Expandable drill-down for multi-unit sales */}
+                          {isMultiUnit && isExpanded && sale.lots_detail && (
+                            <tr key={`${index}-detail`} className="bg-blue-50">
+                              <td colSpan={6} className="px-6 py-4">
+                                <div className="text-xs font-medium text-gray-700 mb-2 uppercase">Individual Units ({sale.unit_count} lots in this transaction)</div>
+                                <div className="bg-white rounded border border-blue-200 overflow-hidden">
+                                  <table className="min-w-full text-xs">
+                                    <thead className="bg-gray-50">
+                                      <tr>
+                                        <th className="px-3 py-2 text-left font-medium text-gray-500">Unit</th>
+                                        <th className="px-3 py-2 text-left font-medium text-gray-500">Surface</th>
+                                        <th className="px-3 py-2 text-left font-medium text-gray-500">Rooms</th>
+                                        <th className="px-3 py-2 text-left font-medium text-gray-500">Individual Price/m²</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                      {sale.lots_detail.map((lot: any, lotIdx: number) => (
+                                        <tr key={lotIdx} className="hover:bg-gray-50">
+                                          <td className="px-3 py-2 text-gray-700">Unit {lotIdx + 1}</td>
+                                          <td className="px-3 py-2 text-gray-900">{lot.surface_area} m²</td>
+                                          <td className="px-3 py-2 text-gray-900">{lot.rooms || '-'}</td>
+                                          <td className="px-3 py-2 text-gray-900">
+                                            {lot.price_per_sqm ? new Intl.NumberFormat('fr-FR', {
+                                              style: 'currency',
+                                              currency: 'EUR',
+                                              maximumFractionDigits: 0,
+                                            }).format(lot.price_per_sqm) : '-'}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                  <div className="px-3 py-2 bg-gray-50 text-xs text-gray-600 border-t border-gray-200">
+                                    Note: Individual prices/m² shown above are calculated per lot. The grouped price/m² ({new Intl.NumberFormat('fr-FR', {
+                                      style: 'currency',
+                                      currency: 'EUR',
+                                      maximumFractionDigits: 0,
+                                    }).format(displayPricePerSqm)}) is the correct market price for the entire transaction.
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(sale.sale_date).toLocaleDateString('fr-FR')}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          {sale.address || '-'}<br />
-                          <span className="text-gray-500">{sale.city} {sale.postal_code}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {sale.surface_area} m²
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                          {new Intl.NumberFormat('fr-FR', {
-                            style: 'currency',
-                            currency: 'EUR',
-                            maximumFractionDigits: 0,
-                          }).format(sale.sale_price)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Intl.NumberFormat('fr-FR', {
-                            style: 'currency',
-                            currency: 'EUR',
-                            maximumFractionDigits: 0,
-                          }).format(sale.price_per_sqm)}
-                        </td>
-                      </tr>
-                    ))}
+                        </>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
