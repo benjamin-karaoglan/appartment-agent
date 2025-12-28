@@ -4,6 +4,9 @@ An AI-powered platform to help clients make informed decisions when purchasing a
 
 ## Recent Updates ✨
 
+- **Fixed Trend Analysis**: Correctly handles grouped multi-unit sales, consistent outlier filtering across all endpoints
+- **Market Trend Visualization**: Interactive 5-year price evolution chart with year-over-year changes
+- **Analysis Tooltips**: Informative guides explaining Simple vs Trend analysis methodologies
 - **Multimodal Document Parsing**: Uses Claude's vision API to analyze PDFs as images, preserving tables, diagrams, and visual layout
 - **Comprehensive Logging**: Full Python logging infrastructure for debugging with rotating log files
 - **Optimized Docker Builds**: Multi-stage builds with layer caching for 10-20x faster rebuilds
@@ -13,9 +16,12 @@ An AI-powered platform to help clients make informed decisions when purchasing a
 ## Features
 
 ### 🏘️ Price Analysis
-- Address-based property search
-- DVF (Demandes de Valeurs Foncières) data integration
-- Comparable sales analysis
+- **Address-based property search** with DVF (Demandes de Valeurs Foncières) data integration
+- **Simple Analysis**: Shows historical sales at exact address with grouped multi-unit transactions
+- **Trend Analysis**: Projects 2025 value using neighboring sales trends (2024-2025 data)
+- **Market Evolution Chart**: Interactive 5-year price visualization with YoY changes
+- **Outlier Detection**: IQR-based filtering for accurate price calculations
+- **Interactive Tooltips**: Explains analysis methodologies and when to use each
 - Price recommendation and bargaining insights
 
 ### 📄 Document Analysis
