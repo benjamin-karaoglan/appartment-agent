@@ -140,3 +140,46 @@ class DVFImport(Base):
         Index('idx_dvf_imports_status', 'status'),
         Index('idx_dvf_imports_year_status', 'data_year', 'status'),
     )
+
+
+class DVFGroupedTransaction(Base):
+    """
+    Materialized view of grouped DVF transactions.
+
+    Multi-unit sales (same transaction_group_id) are aggregated into single records.
+    Each row represents ONE real estate transaction, even if it involved multiple lots/units.
+    """
+
+    __tablename__ = "dvf_grouped_transactions"
+
+    id = Column(Integer, primary_key=True)
+    transaction_group_id = Column(String(32), unique=True, index=True, nullable=False)
+
+    # Transaction information
+    sale_date = Column(Date, index=True, nullable=False)
+    sale_price = Column(Float, nullable=False)
+
+    # Address information
+    address = Column(String, nullable=False)
+    postal_code = Column(String, index=True)
+    city = Column(String)
+    department = Column(String)
+    property_type = Column(String, index=True)
+
+    # Aggregated metrics (sum across all lots)
+    total_surface_area = Column(Float)  # SUM of surface_area
+    total_land_surface = Column(Float)  # SUM of land_surface
+    total_rooms = Column(Integer)  # SUM of rooms
+    unit_count = Column(Integer, nullable=False)  # Number of lots/units in transaction
+
+    # Calculated grouped price per sqm
+    grouped_price_per_sqm = Column(Float)  # sale_price / total_surface_area
+
+    # Metadata
+    data_year = Column(Integer, index=True)
+    source_file = Column(String)
+    import_batch_id = Column(String(36))
+    created_at = Column(DateTime)
+
+    # Lot details for drill-down (JSON array)
+    lots_detail = Column(Text)  # JSON: [{"id": 123, "surface_area": 54, "rooms": 2, ...}, ...]
