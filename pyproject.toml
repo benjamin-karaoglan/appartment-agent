@@ -3,10 +3,11 @@ name = "appartment-agent"
 version = "1.0.0"
 description = "AI-powered apartment purchasing decision platform for France"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 
-[tool.uv.workspace]
-members = ["backend"]
+# [tool.uv.workspace]
+# members = ["backend"]
+# Note: Workspace disabled to allow backend to be built standalone in Docker
 
 [tool.uv]
 dev-dependencies = []

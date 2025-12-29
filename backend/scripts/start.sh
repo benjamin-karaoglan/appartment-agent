@@ -5,7 +5,7 @@ set -e  # Exit on error
 
 echo "Starting backend initialization..."
 
-# Run database initialization
+# Run database initialization (PATH includes .venv/bin)
 python scripts/init_db.py
 
 # Check if initialization succeeded

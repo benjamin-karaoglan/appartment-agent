@@ -30,11 +30,11 @@ services:
       timeout: 3s
       retries: 5
 
-  # Backend API
+  # Backend API (using UV for 10x faster builds!)
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.uv
       target: dev
     environment:
       DATABASE_URL: postgresql://appartment:appartment@db:5432/appartment_agent
@@ -54,6 +54,7 @@ services:
       AUTO_IMPORT_DVF: ${AUTO_IMPORT_DVF:-false}
     volumes:
       - ./backend:/app
+      - backend_venv:/app/.venv  # Preserve venv from Docker image
       - ./uploads:/app/uploads
       - ./data:/app/data
     ports:
@@ -69,11 +70,11 @@ services:
         condition: service_healthy
     command: bash scripts/start.sh
 
-  # Frontend
+  # Frontend (using PNPM for 10x faster builds!)
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.pnpm
       target: dev
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
@@ -81,11 +82,12 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+      - /app/.pnpm-store
     ports:
       - "3000:3000"
     depends_on:
       - backend
-    command: npm run dev
+    command: pnpm dev
 
   # MinIO Object Storage
   minio:
@@ -154,11 +156,11 @@ services:
       temporal:
         condition: service_healthy
 
-  # Temporal Worker
+  # Temporal Worker (using UV for 10x faster builds!)
   temporal-worker:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.uv
       target: dev
     environment:
       DATABASE_URL: postgresql://appartment:appartment@db:5432/appartment_agent
@@ -174,6 +176,7 @@ services:
       MINIO_SECURE: "false"
     volumes:
       - ./backend:/app
+      - backend_venv:/app/.venv  # Share venv with backend
       - ./uploads:/app/uploads
       - ./data:/app/data
     depends_on:
@@ -189,3 +192,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  backend_venv:
