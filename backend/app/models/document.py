@@ -43,6 +43,24 @@ class Document(Base):
     parsed_at = Column(DateTime, nullable=True)
     file_size = Column(Integer)  # in bytes
 
+    # MinIO storage
+    minio_key = Column(String, nullable=True, index=True)  # Object key in MinIO
+    minio_bucket = Column(String, nullable=True)  # Bucket name
+    file_hash = Column(String(64), nullable=True, index=True)  # SHA-256 hash for deduplication
+
+    # Temporal workflow tracking
+    workflow_id = Column(String, nullable=True, index=True)  # Temporal workflow ID
+    workflow_run_id = Column(String, nullable=True)  # Temporal run ID
+    processing_status = Column(String, nullable=True, index=True)  # pending, processing, completed, failed
+    processing_started_at = Column(DateTime, nullable=True)
+    processing_completed_at = Column(DateTime, nullable=True)
+    processing_error = Column(Text, nullable=True)
+
+    # LangChain tracking
+    langchain_model = Column(String, nullable=True)  # Model used for analysis
+    langchain_tokens_used = Column(Integer, nullable=True)  # Total tokens
+    langchain_cost = Column(Float, nullable=True)  # Estimated cost in USD
+
     # Relationships
     user = relationship("User", back_populates="documents")
     property = relationship("Property", back_populates="documents")

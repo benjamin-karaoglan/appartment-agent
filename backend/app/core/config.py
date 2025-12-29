@@ -57,6 +57,20 @@ class Settings(BaseSettings):
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
     CACHE_TTL: int = 3600  # 1 hour cache TTL
 
+    # Temporal Workflow Engine
+    TEMPORAL_HOST: str = os.getenv("TEMPORAL_HOST", "temporal")
+    TEMPORAL_PORT: int = int(os.getenv("TEMPORAL_PORT", "7233"))
+    TEMPORAL_NAMESPACE: str = os.getenv("TEMPORAL_NAMESPACE", "default")
+    TEMPORAL_TASK_QUEUE: str = os.getenv("TEMPORAL_TASK_QUEUE", "document-processing")
+    ENABLE_TEMPORAL_WORKFLOWS: bool = os.getenv("ENABLE_TEMPORAL_WORKFLOWS", "false").lower() == "true"
+
+    # MinIO Object Storage
+    MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "minio:9000")
+    MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+    MINIO_BUCKET: str = os.getenv("MINIO_BUCKET", "documents")
+    MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "false").lower() == "true"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

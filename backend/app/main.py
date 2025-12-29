@@ -11,6 +11,7 @@ import logging
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.api import properties, documents, analysis, users, photos
+from app.api.routes import webhooks
 
 # Initialize logging
 setup_logging(settings.LOG_LEVEL)
@@ -49,6 +50,7 @@ app.include_router(properties.router, prefix="/api/properties", tags=["propertie
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 app.include_router(photos.router, prefix="/api/photos", tags=["photos"])
+app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 
 
 @app.get("/")

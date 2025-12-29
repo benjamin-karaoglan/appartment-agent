@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 import os
 import uuid
+import hashlib
 import PyPDF2
 
 from app.core.database import get_db
@@ -22,6 +23,8 @@ from app.services.claude_service import claude_service
 from app.services.document_service_v2 import DocumentParsingService  # Use new multimodal service
 from app.models.document import DocumentSummary
 from app.schemas.document import DocumentSummaryResponse
+from app.services.minio_service import get_minio_service
+from app.workflows.client import get_temporal_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -493,3 +496,200 @@ async def regenerate_summaries(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to regenerate summary: {str(e)}"
         )
+
+
+@router.post("/upload-async", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
+async def upload_document_async(
+    file: UploadFile = File(...),
+    property_id: Optional[int] = Form(None),
+    document_category: str = Form(...),
+    document_subcategory: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Upload a document for async processing with MinIO and Temporal.
+
+    This endpoint:
+    1. Saves file to MinIO object storage
+    2. Creates document record with pending status
+    3. Optionally starts Temporal workflow for async processing (if ENABLE_TEMPORAL_WORKFLOWS=true)
+    4. Returns immediately without waiting for analysis
+
+    Categories:
+    - pv_ag: PV d'AG (assembly minutes)
+    - diags: Diagnostics (subcategory: dpe, amiante, plomb, termite, electric, gas)
+    - taxe_fonciere: Property tax documents
+    - charges: Condominium charges documents
+    """
+    logger.info(f"Async document upload - user: {current_user}, category: {document_category}, "
+                f"subcategory: {document_subcategory}, property_id: {property_id}, filename: {file.filename}")
+
+    # Validate file extension
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in settings.ALLOWED_EXTENSIONS:
+        logger.warning(f"Invalid file type: {file_ext} for file {file.filename}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type {file_ext} not allowed"
+        )
+
+    # Read file content
+    try:
+        content = await file.read()
+        file_size = len(content)
+        logger.info(f"File read successfully: {file.filename}, size: {file_size} bytes")
+    except Exception as e:
+        logger.error(f"Failed to read file {file.filename}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to read file: {str(e)}"
+        )
+
+    # Calculate file hash
+    file_hash = hashlib.sha256(content).hexdigest()
+
+    # Create document record first (to get ID)
+    try:
+        document = Document(
+            user_id=int(current_user),
+            property_id=property_id,
+            filename=file.filename,
+            file_path="",  # Will be updated after MinIO upload
+            file_type=file_ext,
+            document_category=document_category,
+            document_subcategory=document_subcategory,
+            file_size=file_size,
+            file_hash=file_hash,
+            processing_status="pending"
+        )
+        db.add(document)
+        db.flush()  # Get the document ID
+        document_id = document.id
+
+        logger.info(f"Document record created with ID: {document_id}")
+
+        # Upload to MinIO
+        minio_service = get_minio_service()
+        minio_key = f"documents/{document_id}/{file.filename}"
+
+        minio_service.upload_file(
+            file_data=content,
+            object_name=minio_key,
+            content_type=file.content_type or "application/octet-stream",
+            metadata={
+                "document_id": str(document_id),
+                "user_id": str(current_user),
+                "category": document_category,
+                "subcategory": document_subcategory or ""
+            }
+        )
+
+        logger.info(f"File uploaded to MinIO: {minio_key}")
+
+        # Update document with MinIO info
+        document.minio_key = minio_key
+        document.minio_bucket = settings.MINIO_BUCKET
+        document.file_path = f"minio://{settings.MINIO_BUCKET}/{minio_key}"
+
+        # Start Temporal workflow if enabled
+        if settings.ENABLE_TEMPORAL_WORKFLOWS:
+            try:
+                temporal_client = get_temporal_client()
+                document_type = document_subcategory or document_category
+
+                workflow_info = await temporal_client.start_document_processing(
+                    document_id=document_id,
+                    minio_key=minio_key,
+                    document_type=document_type
+                )
+
+                document.workflow_id = workflow_info["workflow_id"]
+                document.workflow_run_id = workflow_info["workflow_run_id"]
+
+                logger.info(f"Started Temporal workflow: {workflow_info['workflow_id']}")
+
+            except Exception as e:
+                logger.error(f"Failed to start Temporal workflow: {e}")
+                # Don't fail the upload, just log the error
+                document.processing_error = f"Failed to start workflow: {str(e)}"
+        else:
+            logger.info("Temporal workflows disabled, document will be processed synchronously later")
+
+        db.commit()
+        db.refresh(document)
+
+        logger.info(f"Async upload complete for document {document_id}")
+
+        return DocumentResponse(
+            id=document.id,
+            filename=document.filename,
+            file_type=document.file_type,
+            document_category=document.document_category,
+            document_subcategory=document.document_subcategory,
+            is_analyzed=document.is_analyzed,
+            upload_date=document.upload_date,
+            file_size=document.file_size,
+            property_id=document.property_id,
+            processing_status=document.processing_status,
+            workflow_id=document.workflow_id
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to upload document: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload document: {str(e)}"
+        )
+
+
+@router.get("/{document_id}/status")
+async def get_document_status(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Get the processing status of a document.
+
+    Returns:
+    - processing_status: pending, processing, completed, failed
+    - workflow_id: Temporal workflow ID (if using async processing)
+    - is_analyzed: Whether analysis is complete
+    - processing_error: Error message if failed
+    """
+    logger.info(f"Status check for document {document_id}")
+
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.user_id == int(current_user)
+    ).first()
+
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+
+    # If using Temporal, get workflow status
+    workflow_status = None
+    if document.workflow_id and settings.ENABLE_TEMPORAL_WORKFLOWS:
+        try:
+            temporal_client = get_temporal_client()
+            workflow_status = await temporal_client.get_workflow_status(document.workflow_id)
+        except Exception as e:
+            logger.error(f"Failed to get workflow status: {e}")
+
+    return {
+        "document_id": document.id,
+        "filename": document.filename,
+        "processing_status": document.processing_status,
+        "is_analyzed": document.is_analyzed,
+        "workflow_id": document.workflow_id,
+        "workflow_run_id": document.workflow_run_id,
+        "processing_started_at": document.processing_started_at,
+        "processing_completed_at": document.processing_completed_at,
+        "processing_error": document.processing_error,
+        "workflow_status": workflow_status
+    }

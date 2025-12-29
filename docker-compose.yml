@@ -51,6 +51,7 @@ services:
       MINIO_BUCKET: documents
       MINIO_SECURE: "false"
       ENABLE_TEMPORAL_WORKFLOWS: "true"
+      AUTO_IMPORT_DVF: ${AUTO_IMPORT_DVF:-false}
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads
@@ -66,7 +67,7 @@ services:
         condition: service_healthy
       temporal:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: bash scripts/start.sh
 
   # Frontend
   frontend:
@@ -130,7 +131,6 @@ services:
       - POSTGRES_USER=appartment
       - POSTGRES_PWD=appartment
       - POSTGRES_SEEDS=db
-      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
     ports:
       - "7233:7233"     # gRPC
     depends_on:

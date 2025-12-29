@@ -4,6 +4,10 @@ AI-powered apartment purchasing decision platform for France - Backend API
 
 ## Features
 
+- **Async Document Processing**: Upload documents for background processing with Temporal workflows
+- **MinIO Object Storage**: S3-compatible object storage with file deduplication and presigned URLs
+- **LangChain Integration**: ChatAnthropic for document analysis with token tracking and cost estimation
+- **Temporal Workflows**: Durable, fault-tolerant workflow orchestration with automatic retries
 - **Multimodal Document Parsing**: Uses Claude's vision capabilities to parse PDF documents (diagnostics, PV d'AG, tax documents)
 - **Comprehensive Logging**: Full logging support with file rotation and error tracking
 - **Fast Dependency Management**: Uses `uv` for lightning-fast package installation
@@ -62,6 +66,15 @@ Key environment variables (set in `.env`):
 - `ANTHROPIC_API_KEY`: Your Anthropic API key for Claude
 - `SECRET_KEY`: Secret key for JWT token generation
 - `LOG_LEVEL`: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- `MINIO_ENDPOINT`: MinIO server endpoint (default: minio:9000)
+- `MINIO_ACCESS_KEY`: MinIO access key (default: minioadmin)
+- `MINIO_SECRET_KEY`: MinIO secret key (default: minioadmin)
+- `MINIO_BUCKET`: MinIO bucket name (default: documents)
+- `TEMPORAL_HOST`: Temporal server host (default: temporal)
+- `TEMPORAL_PORT`: Temporal server port (default: 7233)
+- `TEMPORAL_NAMESPACE`: Temporal namespace (default: default)
+- `TEMPORAL_TASK_QUEUE`: Temporal task queue (default: document-processing)
+- `ENABLE_TEMPORAL_WORKFLOWS`: Enable async workflows (default: false)
 
 ## Logging
 
@@ -71,12 +84,36 @@ Logs are stored in the `logs/` directory:
 
 ## Document Processing
 
-The backend now uses Claude's multimodal capabilities to process documents:
+### Synchronous Processing (Default)
+
+The traditional endpoint for immediate processing:
 
 1. **Upload**: Documents are uploaded via `/api/documents/upload`
 2. **PDF to Images**: PDFs are converted to high-quality images
 3. **Multimodal Analysis**: Images are sent to Claude for analysis
 4. **Structured Extraction**: Results are parsed and stored in the database
+
+### Asynchronous Processing (New)
+
+For scalable background processing with Temporal workflows:
+
+1. **Upload**: Documents are uploaded via `/api/documents/upload-async`
+2. **MinIO Storage**: Files are stored in MinIO object storage
+3. **Workflow Start**: Temporal workflow is triggered for background processing
+4. **Status Tracking**: Monitor progress via `/api/documents/{id}/status`
+5. **Workflow Execution**:
+   - Download file from MinIO
+   - Convert PDF to images
+   - Analyze with LangChain + Claude
+   - Save results to database
+   - Update status (completed/failed)
+
+**Architecture Benefits**:
+- **Scalability**: Process documents in background workers
+- **Fault Tolerance**: Automatic retries on failures
+- **Observability**: Track workflow status in Temporal UI
+- **Cost Tracking**: LangChain integration tracks tokens and costs
+- **Deduplication**: SHA-256 file hashing prevents duplicate processing
 
 Supported document types:
 - **PV d'AG**: Assembly meeting minutes

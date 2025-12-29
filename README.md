@@ -4,14 +4,16 @@ An AI-powered platform to help clients make informed decisions when purchasing a
 
 ## Recent Updates ✨
 
+- **Async Document Processing**: MinIO object storage + Temporal workflows for scalable async document processing
+- **LangChain Integration**: Replaces direct API calls with LangChain for better observability and token tracking
+- **MinIO Object Storage**: S3-compatible storage for documents with presigned URLs and bucket notifications
+- **Temporal Workflows**: Durable, fault-tolerant document processing with automatic retries and status tracking
 - **Fixed Trend Analysis**: Correctly handles grouped multi-unit sales, consistent outlier filtering across all endpoints
 - **Market Trend Visualization**: Interactive 5-year price evolution chart with year-over-year changes
 - **Analysis Tooltips**: Informative guides explaining Simple vs Trend analysis methodologies
 - **Multimodal Document Parsing**: Uses Claude's vision API to analyze PDFs as images, preserving tables, diagrams, and visual layout
 - **Comprehensive Logging**: Full Python logging infrastructure for debugging with rotating log files
 - **Optimized Docker Builds**: Multi-stage builds with layer caching for 10-20x faster rebuilds
-- **UV Package Manager**: Faster dependency resolution and installation
-- **Enhanced Diagnostics**: Better error tracking and debugging capabilities
 
 ## Features
 
@@ -25,9 +27,12 @@ An AI-powered platform to help clients make informed decisions when purchasing a
 - Price recommendation and bargaining insights
 
 ### 📄 Document Analysis
+- **Async Document Processing**: Upload documents for background processing with real-time status updates
 - **PV d'AG Analysis**: Upload past 3 years of assembly meeting minutes to identify upcoming costs and copropriété works
 - **Diagnostic Analysis**: Automated review of DPE, plomb, and amiante reports with risk flagging
 - **Tax & Charges Parser**: Extract and annualize costs from Taxe Foncière and charges documents
+- **Document Storage**: Secure MinIO object storage with file deduplication and presigned URLs
+- **Workflow Tracking**: Monitor document processing status via Temporal workflows
 
 ### 🎨 AI-Powered Visualization
 - Upload apartment photos
@@ -55,12 +60,15 @@ An AI-powered platform to help clients make informed decisions when purchasing a
 - SQLAlchemy ORM
 - PostgreSQL database
 - Pydantic for validation
+- **LangChain** with ChatAnthropic for document analysis
 - Anthropic Claude API with **multimodal vision** for document parsing
 - PyMuPDF for PDF-to-image conversion
 - Comprehensive Python logging infrastructure
 
 ### Infrastructure
 - Docker & Docker Compose with optimized multi-stage builds
+- **MinIO** for S3-compatible object storage
+- **Temporal** for durable workflow orchestration
 - UV for fast Python dependency management
 - Nginx for reverse proxy (planned)
 - Redis for caching (planned)
@@ -78,15 +86,17 @@ appartment-agent/
 │   └── public/           # Static assets
 ├── backend/              # FastAPI application
 │   ├── app/
-│   │   ├── api/          # API routes
+│   │   ├── api/          # API routes & webhooks
 │   │   ├── core/         # Core functionality
 │   │   ├── models/       # Database models
 │   │   ├── schemas/      # Pydantic schemas
-│   │   ├── services/     # Business logic
+│   │   ├── services/     # Business logic (MinIO, LangChain)
+│   │   ├── workflows/    # Temporal workflows & activities
 │   │   └── main.py       # Application entry
+│   ├── scripts/          # Database & DVF import scripts
 │   └── requirements.txt
 ├── data/                 # DVF data storage
-├── uploads/              # User uploaded files
+├── uploads/              # User uploaded files (legacy)
 ├── docs/                 # Documentation
 └── docker-compose.yml    # Docker configuration
 ```
@@ -109,6 +119,23 @@ DATABASE_URL=postgresql://user:password@db:5432/appartment_agent
 ANTHROPIC_API_KEY=your_api_key_here
 SECRET_KEY=your_secret_key_here
 ENVIRONMENT=development
+
+# MinIO Object Storage
+MINIO_ENDPOINT=minio:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=documents
+MINIO_SECURE=false
+
+# Temporal Workflows
+TEMPORAL_HOST=temporal
+TEMPORAL_PORT=7233
+TEMPORAL_NAMESPACE=default
+TEMPORAL_TASK_QUEUE=document-processing
+ENABLE_TEMPORAL_WORKFLOWS=true
+
+# Auto-import DVF data on startup (optional)
+AUTO_IMPORT_DVF=false
 ```
 
 **Frontend `.env.local`:**
@@ -131,6 +158,8 @@ docker-compose up
 - Frontend: http://localhost:3000 (Next.js Fast Refresh)
 - Backend API: http://localhost:8000 (Uvicorn --reload)
 - API Docs: http://localhost:8000/docs
+- MinIO Console: http://localhost:9001 (minioadmin/minioadmin)
+- Temporal UI: http://localhost:8080
 
 **Hot-Reload is Active!** Edit any file and watch it reload automatically:
 - **Backend (.py files)**: ~1 second restart

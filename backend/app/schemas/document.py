@@ -14,7 +14,7 @@ class DocumentUpload(BaseModel):
 class DocumentResponse(BaseModel):
     """Schema for document response."""
     id: int
-    user_id: int
+    user_id: Optional[int] = None
     property_id: Optional[int] = None
     filename: str
     file_type: str
@@ -29,6 +29,15 @@ class DocumentResponse(BaseModel):
     upload_date: datetime
     parsed_at: Optional[datetime] = None
     file_size: int
+
+    # MinIO and Temporal fields
+    minio_key: Optional[str] = None
+    processing_status: Optional[str] = None
+    workflow_id: Optional[str] = None
+    workflow_run_id: Optional[str] = None
+    processing_started_at: Optional[datetime] = None
+    processing_completed_at: Optional[datetime] = None
+    processing_error: Optional[str] = None
 
     class Config:
         from_attributes = True
