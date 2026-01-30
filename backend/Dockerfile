@@ -117,5 +117,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
 
-# Production command (no reload)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Make start script executable
+RUN chmod +x scripts/start_production.sh
+
+# Production command - runs migrations then starts server
+CMD ["bash", "scripts/start_production.sh"]

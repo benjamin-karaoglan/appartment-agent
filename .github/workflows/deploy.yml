@@ -254,38 +254,6 @@ jobs:
           echo "| Backend | ${{ env.BACKEND_URL }} |" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================================
-  # Database Migration (runs after both backend and frontend complete)
+  # NOTE: Database migrations now run automatically on backend startup
+  # See backend/scripts/start_production.sh
   # ===========================================================================
-  migrate:
-    name: Migrations
-    runs-on: ubuntu-latest
-    needs: [backend, frontend]
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.backend.outputs.gcp_configured == 'true' }}
-
-    steps:
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Run Alembic migrations
-        run: |
-          # Deploy migration job using the debug script
-          gcloud run jobs deploy db-migrate \
-            --image ${{ env.ARTIFACT_REGISTRY }}/backend:${{ github.sha }} \
-            --region ${{ env.GCP_REGION }} \
-            --task-timeout 600 \
-            --memory 1Gi \
-            --set-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
-            --set-secrets "DATABASE_URL=database-url:latest" \
-            --command "python" \
-            --args "scripts/run_migrations.py" \
-            --service-account appartment-backend@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
-          
-          # Execute and wait
-          gcloud run jobs execute db-migrate --region ${{ env.GCP_REGION }} --wait
-          
-          echo "## 🗄️ Migrations Complete" >> $GITHUB_STEP_SUMMARY
