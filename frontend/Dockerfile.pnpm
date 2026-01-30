@@ -50,6 +50,10 @@ WORKDIR /app
 # Install pnpm globally (version 10 to match local development)
 RUN npm install -g pnpm@10
 
+# Build argument for API URL (MUST be set at build time for Next.js)
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 
@@ -57,8 +61,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build the Next.js application
-# This generates optimized production code
-RUN pnpm build
+# This generates optimized production code with the API URL baked in
+RUN echo "Building with NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL" && pnpm build
 
 # Stage 4: Production (minimal image)
 FROM node:18-alpine AS production
