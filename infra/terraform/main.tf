@@ -80,6 +80,13 @@ variable "redis_memory_size_gb" {
   default     = 1
 }
 
+variable "logfire_token" {
+  description = "Logfire write token for observability (optional). Can also be set via: echo -n 'TOKEN' | gcloud secrets versions add logfire-token --data-file=-"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 # =============================================================================
 # Provider Configuration
 # =============================================================================
@@ -429,6 +436,25 @@ resource "google_secret_manager_secret" "google_api_key" {
   depends_on = [google_project_service.apis]
 }
 
+# Logfire write token (set value manually or via variable)
+resource "google_secret_manager_secret" "logfire_token" {
+  secret_id = "logfire-token"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# Optional: set initial Logfire token via TF_VAR_logfire_token to avoid manual step
+resource "google_secret_manager_secret_version" "logfire_token" {
+  count = var.logfire_token != "" ? 1 : 0
+
+  secret      = google_secret_manager_secret.logfire_token.id
+  secret_data = var.logfire_token
+}
+
 # =============================================================================
 # Cloud Run - Backend
 # =============================================================================
@@ -530,6 +556,21 @@ resource "google_cloud_run_v2_service" "backend" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.jwt_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "LOGFIRE_ENABLED"
+        value = "true"
+      }
+
+      env {
+        name = "LOGFIRE_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.logfire_token.secret_id
             version = "latest"
           }
         }
