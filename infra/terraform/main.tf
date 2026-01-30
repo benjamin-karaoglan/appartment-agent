@@ -631,7 +631,8 @@ resource "google_secret_manager_secret" "database_url" {
 
 resource "google_secret_manager_secret_version" "database_url" {
   secret      = google_secret_manager_secret.database_url.id
-  secret_data = "postgresql://appartment:${random_password.db_password.result}@${google_sql_database_instance.postgres.private_ip_address}:5432/appartment_agent"
+  # Use Unix socket format for Cloud SQL connection (required for Cloud Run)
+  secret_data = "postgresql://appartment:${random_password.db_password.result}@/appartment_agent?host=/cloudsql/${google_sql_database_instance.postgres.connection_name}"
 
   depends_on = [google_sql_database_instance.postgres]
 }
@@ -642,6 +643,64 @@ resource "google_cloud_run_v2_service_iam_member" "backend_public" {
   name     = google_cloud_run_v2_service.backend.name
   role     = "roles/run.invoker"
   member   = "allUsers"
+}
+
+# =============================================================================
+# Cloud Run Job - Database Migrations
+# =============================================================================
+# This job is updated and executed by CI/CD before deploying the API
+
+resource "google_cloud_run_v2_job" "db_migrate" {
+  name     = "db-migrate"
+  location = var.region
+
+  template {
+    template {
+      service_account = google_service_account.backend.email
+      timeout         = "600s"
+      max_retries     = 1
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.postgres.connection_name]
+        }
+      }
+
+      containers {
+        image   = "${var.region}-docker.pkg.dev/${var.project_id}/appartment-agent/backend:latest"
+        command = ["alembic", "upgrade", "head"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "1Gi"
+          }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+
+        env {
+          name = "DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.database_url.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_secret_manager_secret_version.database_url,
+    google_sql_database.database,
+  ]
 }
 
 # =============================================================================
@@ -745,4 +804,9 @@ output "backend_service_account" {
 output "vpc_connector" {
   description = "VPC Connector name"
   value       = google_vpc_access_connector.connector.name
+}
+
+output "migration_job" {
+  description = "Database migration Cloud Run Job name"
+  value       = google_cloud_run_v2_job.db_migrate.name
 }
