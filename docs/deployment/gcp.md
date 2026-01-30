@@ -178,6 +178,27 @@ echo -n "your-api-key" | \
   gcloud secrets versions add google-cloud-api-key --data-file=-
 ```
 
+### Logfire token (optional)
+
+To enable [Logfire](https://logfire.pydantic.dev/) observability:
+
+1. Create a write token in the [Logfire dashboard](https://logfire.pydantic.dev/).
+2. Store it in Secret Manager (Terraform creates the secret; you add the value):
+
+```bash
+# After terraform apply (secret "logfire-token" exists)
+echo -n "YOUR_LOGFIRE_WRITE_TOKEN" | \
+  gcloud secrets versions add logfire-token --data-file=-
+```
+
+Or pass the token when applying Terraform (stored in state, sensitive):
+
+```bash
+terraform apply -var="logfire_token=YOUR_LOGFIRE_WRITE_TOKEN"
+```
+
+3. Redeploy the backend so it picks up the new secret (or run `terraform apply` again).
+
 ## Deploy Application
 
 ### Automatic (GitHub Actions)
@@ -251,6 +272,8 @@ gcloud run jobs execute db-migrate --region $REGION --wait
 | `ENVIRONMENT` | Direct | `production` |
 | `DATABASE_URL` | Secret Manager | PostgreSQL URL |
 | `SECRET_KEY` | Secret Manager | JWT signing key |
+| `LOGFIRE_TOKEN` | Secret Manager | Logfire write token (optional) |
+| `LOGFIRE_ENABLED` | Direct | `true` when using Logfire |
 | `GOOGLE_CLOUD_PROJECT` | Direct | GCP project ID |
 | `GEMINI_USE_VERTEXAI` | Direct | `true` |
 | `STORAGE_BACKEND` | Direct | `gcs` |
