@@ -2,18 +2,26 @@
 # CI/CD Pipeline - Build and Deploy to GCP
 # =============================================================================
 #
-# Triggers:
-# - Push to main branch: Deploy to production
-# - Push to develop branch: Deploy to staging (if configured)
-# - Pull requests: Build and test only
+# FULLY PARALLEL Pipeline:
 #
-# Required GitHub Secrets (for GCP deployment):
-# - GCP_PROJECT_ID: Your GCP project ID
-# - GCP_REGION: GCP region (e.g., europe-west1)
-# - GCP_SA_KEY: Service account key JSON for deployment
+#   ┌─────────────────────────────────────────────────────────┐
+#   │                    PARALLEL PHASE                       │
+#   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
+#   │  │   Backend   │  │  Frontend   │  │    Frontend     │  │
+#   │  │ Test+Build  │  │    Test     │  │  Build+Deploy   │  │
+#   │  │   +Deploy   │  │             │  │ (uses stable    │  │
+#   │  │             │  │             │  │  backend URL)   │  │
+#   │  └──────┬──────┘  └─────────────┘  └────────┬────────┘  │
+#   └─────────┼───────────────────────────────────┼───────────┘
+#             │                                   │
+#             └─────────────────┬─────────────────┘
+#                               ▼
+#                       ┌─────────────┐
+#                       │  Migrations │
+#                       └─────────────┘
 #
-# Note: GCP deployment steps are skipped if secrets are not configured.
-# Build and test steps will still run.
+# Note: Cloud Run URLs are STABLE. The backend URL never changes after
+# initial creation, so frontend can build in parallel with backend.
 #
 # =============================================================================
 
@@ -33,17 +41,18 @@ env:
   GCP_REGION: ${{ secrets.GCP_REGION || 'europe-west1' }}
   ARTIFACT_REGISTRY: ${{ secrets.GCP_REGION || 'europe-west1' }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/appartment-agent
   CLOUD_SQL_INSTANCE: ${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_REGION || 'europe-west1' }}:appartment-agent-db
+  # Cloud Run URL is STABLE - it never changes after service creation
+  BACKEND_URL: https://appartment-backend-rujxdolp6a-ew.a.run.app
 
 jobs:
   # ===========================================================================
-  # Backend Build, Test, and Deploy
+  # Backend: Test, Build, and Deploy (runs in parallel with frontend jobs)
   # ===========================================================================
   backend:
-    name: Backend Build & Deploy
+    name: Backend
     runs-on: ubuntu-latest
     outputs:
       gcp_configured: ${{ steps.check_gcp.outputs.configured }}
-      backend_url: ${{ steps.deploy_backend.outputs.url }}
 
     steps:
       - name: Checkout code
@@ -56,10 +65,10 @@ jobs:
         run: |
           if [ -n "$GCP_SA_KEY" ]; then
             echo "configured=true" >> $GITHUB_OUTPUT
-            echo "✅ GCP secrets configured - will deploy to cloud"
+            echo "✅ GCP secrets configured"
           else
             echo "configured=false" >> $GITHUB_OUTPUT
-            echo "⚠️ GCP secrets not configured - skipping cloud deployment steps"
+            echo "⚠️ GCP secrets not configured - skipping deployment"
           fi
 
       - name: Set up Python
@@ -84,26 +93,27 @@ jobs:
         run: uv run pytest tests/ -v --tb=short
         continue-on-error: true
 
-      # Build and Deploy Backend
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
+      # === GCP Deployment ===
       - name: Authenticate to Google Cloud
-        if: ${{ github.event_name == 'push' && steps.check_gcp.outputs.configured == 'true' }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
-        if: ${{ github.event_name == 'push' && steps.check_gcp.outputs.configured == 'true' }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for Artifact Registry
-        if: ${{ github.event_name == 'push' && steps.check_gcp.outputs.configured == 'true' }}
+      - name: Configure Docker
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
 
-      - name: Build and push backend image
-        if: ${{ github.event_name == 'push' && steps.check_gcp.outputs.configured == 'true' }}
+      - name: Set up Docker Buildx
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -116,10 +126,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Deploy Backend to Cloud Run (before frontend so we get the URL)
-      - name: Deploy Backend to Cloud Run
+      - name: Deploy to Cloud Run
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
-        id: deploy_backend
         run: |
           gcloud run deploy appartment-backend \
             --image ${{ env.ARTIFACT_REGISTRY }}/backend:${{ github.sha }} \
@@ -143,25 +151,31 @@ jobs:
             --set-secrets "SECRET_KEY=jwt-secret:latest" \
             --set-secrets "GOOGLE_CLOUD_API_KEY=google-cloud-api-key:latest" \
             --service-account appartment-backend@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
-          
-          # Get the backend URL
-          URL=$(gcloud run services describe appartment-backend \
-            --region ${{ env.GCP_REGION }} \
-            --format 'value(status.url)')
-          echo "url=$URL" >> $GITHUB_OUTPUT
-          echo "Backend URL: $URL"
+          echo "✅ Backend deployed: ${{ env.BACKEND_URL }}"
 
   # ===========================================================================
-  # Frontend Build and Deploy (depends on backend for URL)
+  # Frontend: Test, Build, and Deploy (runs in parallel with backend)
   # ===========================================================================
   frontend:
-    name: Frontend Build & Deploy
+    name: Frontend
     runs-on: ubuntu-latest
-    needs: [backend]
+    outputs:
+      gcp_configured: ${{ steps.check_gcp.outputs.configured }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Check if GCP secrets are configured
+        id: check_gcp
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -n "$GCP_SA_KEY" ]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -182,34 +196,33 @@ jobs:
         run: pnpm lint
         continue-on-error: true
 
-      - name: Build frontend (local test)
-        if: ${{ github.event_name == 'pull_request' || needs.backend.outputs.gcp_configured != 'true' }}
+      - name: Build (type check)
         working-directory: ./frontend
         run: pnpm build
         env:
-          NEXT_PUBLIC_API_URL: http://localhost:8000
+          NEXT_PUBLIC_API_URL: ${{ env.BACKEND_URL }}
 
-      # GCP Deployment
+      # === GCP Deployment ===
       - name: Authenticate to Google Cloud
-        if: ${{ github.event_name == 'push' && needs.backend.outputs.gcp_configured == 'true' }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
-        if: ${{ github.event_name == 'push' && needs.backend.outputs.gcp_configured == 'true' }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for Artifact Registry
-        if: ${{ github.event_name == 'push' && needs.backend.outputs.gcp_configured == 'true' }}
+      - name: Configure Docker
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
 
       - name: Set up Docker Buildx
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         uses: docker/setup-buildx-action@v3
 
-      # Build frontend with ACTUAL backend URL (this is the key fix!)
-      - name: Build and push frontend image
-        if: ${{ github.event_name == 'push' && needs.backend.outputs.gcp_configured == 'true' }}
+      - name: Build and push image
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -222,11 +235,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ needs.backend.outputs.backend_url }}
+            NEXT_PUBLIC_API_URL=${{ env.BACKEND_URL }}
 
-      # Deploy Frontend to Cloud Run
-      - name: Deploy Frontend to Cloud Run
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.backend.outputs.gcp_configured == 'true' }}
+      - name: Deploy to Cloud Run
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         run: |
           gcloud run deploy appartment-frontend \
             --image ${{ env.ARTIFACT_REGISTRY }}/frontend:${{ github.sha }} \
@@ -239,29 +251,26 @@ jobs:
             --max-instances 10 \
             --service-account appartment-frontend@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
 
-      # Output URLs
-      - name: Output Deployment URLs
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.backend.outputs.gcp_configured == 'true' }}
+      - name: Output URLs
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_gcp.outputs.configured == 'true' }}
         run: |
-          echo "## Deployment Complete! 🚀" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           FRONTEND_URL=$(gcloud run services describe appartment-frontend --region ${{ env.GCP_REGION }} --format 'value(status.url)')
-          echo "**Frontend:** $FRONTEND_URL" >> $GITHUB_STEP_SUMMARY
-          echo "**Backend:** ${{ needs.backend.outputs.backend_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | $FRONTEND_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | ${{ env.BACKEND_URL }} |" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================================
-  # Database Migration
+  # Database Migration (runs after both backend and frontend complete)
   # ===========================================================================
   migrate:
-    name: Run Database Migrations
+    name: Migrations
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.backend.outputs.gcp_configured == 'true' }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -270,12 +279,12 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Run migrations via Cloud Run Job
+      - name: Run Alembic migrations
         run: |
-          # Delete old migration job if exists
+          # Delete old job if exists
           gcloud run jobs delete db-migrate --region ${{ env.GCP_REGION }} --quiet || true
           
-          # Create migration job with proper database connection
+          # Create migration job
           gcloud run jobs create db-migrate \
             --image ${{ env.ARTIFACT_REGISTRY }}/backend:${{ github.sha }} \
             --region ${{ env.GCP_REGION }} \
@@ -287,9 +296,7 @@ jobs:
             --args "upgrade,head" \
             --service-account appartment-backend@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
           
-          # Execute the job and wait for completion
-          gcloud run jobs execute db-migrate \
-            --region ${{ env.GCP_REGION }} \
-            --wait
+          # Execute
+          gcloud run jobs execute db-migrate --region ${{ env.GCP_REGION }} --wait
           
-          echo "## Database Migration Complete! 🗄️" >> $GITHUB_STEP_SUMMARY
+          echo "## 🗄️ Migrations Complete" >> $GITHUB_STEP_SUMMARY
