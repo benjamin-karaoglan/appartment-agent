@@ -2,23 +2,15 @@
 # CI/CD Pipeline - Build and Deploy to GCP
 # =============================================================================
 #
-# FULLY PARALLEL Pipeline:
+# Triggers:
+# - Push to main branch: Deploy to production
+# - Push to develop branch: Deploy to staging (if configured)
+# - Pull requests: Build and test only
 #
-#   ┌─────────────────────────────────────────────────────────┐
-#   │                    PARALLEL PHASE                       │
-#   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
-#   │  │   Backend   │  │  Frontend   │  │    Frontend     │  │
-#   │  │ Test+Build  │  │    Test     │  │  Build+Deploy   │  │
-#   │  │   +Deploy   │  │             │  │ (uses stable    │  │
-#   │  │             │  │             │  │  backend URL)   │  │
-#   │  └──────┬──────┘  └─────────────┘  └────────┬────────┘  │
-#   └─────────┼───────────────────────────────────┼───────────┘
-#             │                                   │
-#             └─────────────────┬─────────────────┘
-#                               ▼
-#                       ┌─────────────┐
-#                       │  Migrations │
-#                       └─────────────┘
+# Required GitHub Secrets (for GCP deployment):
+# - GCP_PROJECT_ID: Your GCP project ID
+# - GCP_REGION: GCP region (e.g., europe-west1)
+# - GCP_SA_KEY: Service account key JSON for deployment
 #
 # Note: Cloud Run URLs are STABLE. The backend URL never changes after
 # initial creation, so frontend can build in parallel with backend.
