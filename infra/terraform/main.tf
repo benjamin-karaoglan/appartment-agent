@@ -191,6 +191,12 @@ resource "google_service_account" "cloudbuild" {
   display_name = "Appartment Agent Cloud Build"
 }
 
+# GitHub Actions Deployer Service Account
+resource "google_service_account" "deployer" {
+  account_id   = "appartment-deployer"
+  display_name = "Appartment Agent GitHub Actions Deployer"
+}
+
 # =============================================================================
 # IAM Permissions
 # =============================================================================
@@ -236,6 +242,22 @@ resource "google_project_iam_member" "cloudbuild_permissions" {
   project = var.project_id
   role    = each.key
   member  = "serviceAccount:${google_service_account.cloudbuild.email}"
+}
+
+# GitHub Actions Deployer permissions
+resource "google_project_iam_member" "deployer_permissions" {
+  for_each = toset([
+    "roles/run.admin",
+    "roles/iam.serviceAccountUser",
+    "roles/artifactregistry.writer",
+    "roles/secretmanager.secretAccessor",
+    "roles/logging.logWriter",
+    "roles/storage.admin",
+  ])
+
+  project = var.project_id
+  role    = each.key
+  member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
 # =============================================================================
@@ -477,6 +499,14 @@ resource "google_cloud_run_v2_service" "backend" {
       egress    = "ALL_TRAFFIC"
     }
 
+    # Cloud SQL connection for Unix socket access
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.postgres.connection_name]
+      }
+    }
+
     scaling {
       min_instance_count = var.environment == "production" ? 1 : 0
       max_instance_count = 10
@@ -579,6 +609,12 @@ resource "google_cloud_run_v2_service" "backend" {
             version = "latest"
           }
         }
+      }
+
+      # Mount Cloud SQL socket
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
       }
 
       startup_probe {
@@ -816,4 +852,9 @@ output "vpc_connector" {
 output "migration_job" {
   description = "Database migration Cloud Run Job name"
   value       = google_cloud_run_v2_job.db_migrate.name
+}
+
+output "deployer_service_account" {
+  description = "GitHub Actions deployer service account email"
+  value       = google_service_account.deployer.email
 }
