@@ -1,5 +1,5 @@
 # Stage 1: Dependencies
-FROM --platform=linux/amd64 node:18-alpine AS deps
+FROM node:18-alpine AS deps
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY package*.json ./
 RUN npm ci
 
 # Stage 2: Development
-FROM --platform=linux/amd64 node:18-alpine AS dev
+FROM node:18-alpine AS dev
 
 WORKDIR /app
 

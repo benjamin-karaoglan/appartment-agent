@@ -4,7 +4,7 @@
 # ============================================================================
 
 # Stage 1: Build dependencies with UV
-FROM --platform=linux/amd64 python:3.10-slim AS builder
+FROM python:3.10-slim AS builder
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ============================================================================
 # Stage 2: Development runtime
 # ============================================================================
-FROM --platform=linux/amd64 python:3.10-slim AS dev
+FROM python:3.10-slim AS dev
 
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y \
@@ -81,7 +81,7 @@ CMD ["bash", "scripts/start.sh"]
 # ============================================================================
 # Stage 3: Production runtime (optimized)
 # ============================================================================
-FROM --platform=linux/amd64 python:3.10-slim AS production
+FROM python:3.10-slim AS production
 
 WORKDIR /app
 
