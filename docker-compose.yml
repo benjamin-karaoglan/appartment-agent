@@ -63,7 +63,7 @@ services:
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
       GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-us-central1}
       GEMINI_USE_VERTEXAI: ${GEMINI_USE_VERTEXAI:-true}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-image}
+      GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-2.5-flash-image}
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/.secrets/adc.json}
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
       ENVIRONMENT: development

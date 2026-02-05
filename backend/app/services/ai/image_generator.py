@@ -30,7 +30,7 @@ class ImageGenerator:
     def __init__(self):
         """Initialize Gemini client for image generation."""
         self.use_vertexai = settings.GEMINI_USE_VERTEXAI
-        self.model = settings.GEMINI_MODEL  # Image generation model
+        self.model = settings.GEMINI_IMAGE_MODEL  # Image generation model
         self.project = settings.GOOGLE_CLOUD_PROJECT
         self.location = settings.GOOGLE_CLOUD_LOCATION
 

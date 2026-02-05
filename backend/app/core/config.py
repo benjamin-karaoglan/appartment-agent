@@ -2,9 +2,10 @@
 Application configuration using Pydantic settings.
 """
 
-from pydantic_settings import BaseSettings
-from typing import List
 import os
+from typing import List
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -50,8 +51,7 @@ class Settings(BaseSettings):
 
     # Gemini Models
     GEMINI_LLM_MODEL: str = os.getenv("GEMINI_LLM_MODEL", "gemini-2.0-flash-lite")  # Default for text/document analysis
-    GEMINI_IMAGE_MODEL: str = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.0-flash-exp")  # For image generation
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")  # Legacy alias for image model
+    GEMINI_IMAGE_MODEL: str = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")  # For image generation
 
     # Anthropic (DEPRECATED - kept for backward compatibility)
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
 
     # DVF Data - Use environment variable or /tmp for Cloud Run
     DVF_DATA_DIR: str = os.getenv("DVF_DATA_DIR", "/tmp/data/dvf")
-    
+
     # Logfire observability (optional - set LOGFIRE_TOKEN to enable)
     LOGFIRE_TOKEN: str = os.getenv("LOGFIRE_TOKEN", "")
     LOGFIRE_ENABLED: bool = os.getenv("LOGFIRE_ENABLED", "false").lower() == "true"
