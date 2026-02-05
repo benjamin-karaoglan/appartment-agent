@@ -254,7 +254,10 @@ class GCSBackend(StorageBackend):
         self.client = storage.Client(project=settings.GOOGLE_CLOUD_PROJECT)
         self.documents_bucket = settings.GCS_DOCUMENTS_BUCKET or f"{settings.GOOGLE_CLOUD_PROJECT}-documents"
         self.photos_bucket = settings.GCS_PHOTOS_BUCKET or f"{settings.GOOGLE_CLOUD_PROJECT}-photos"
-        
+
+        # Set default bucket for compatibility with StorageService
+        self.default_bucket = self.documents_bucket
+
         # Get service account email for signing URLs
         self._service_account_email = self._get_service_account_email()
 
@@ -286,9 +289,11 @@ class GCSBackend(StorageBackend):
     def _get_bucket(self, bucket_name: Optional[str] = None):
         """Get the appropriate bucket."""
         name = bucket_name or self.documents_bucket
-        # Map 'photos' to photos bucket
+        # Map legacy MinIO bucket names to actual GCS bucket names
         if name == "photos":
             name = self.photos_bucket
+        elif name == "documents":
+            name = self.documents_bucket
         return self.client.bucket(name)
 
     def upload_file(
