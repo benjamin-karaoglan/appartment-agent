@@ -249,6 +249,13 @@ resource "google_project_iam_member" "backend_permissions" {
   member  = "serviceAccount:${google_service_account.backend.email}"
 }
 
+# Backend service account needs Token Creator role on itself for GCS signed URL generation
+resource "google_service_account_iam_member" "backend_token_creator" {
+  service_account_id = google_service_account.backend.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.backend.email}"
+}
+
 # Frontend permissions
 resource "google_project_iam_member" "frontend_permissions" {
   for_each = toset([
@@ -602,6 +609,11 @@ resource "google_cloud_run_v2_service" "backend" {
       }
 
       env {
+        name  = "GEMINI_IMAGE_MODEL"
+        value = "gemini-2.5-flash-image"
+      }
+
+      env {
         name  = "GCS_DOCUMENTS_BUCKET"
         value = google_storage_bucket.documents.name
       }
@@ -658,6 +670,15 @@ resource "google_cloud_run_v2_service" "backend" {
             secret  = google_secret_manager_secret.logfire_token.secret_id
             version = "latest"
           }
+        }
+      }
+
+      # CORS - Allow custom domain if configured
+      dynamic "env" {
+        for_each = var.domain != "" ? [1] : []
+        content {
+          name  = "EXTRA_CORS_ORIGINS"
+          value = "https://${var.domain},https://www.${var.domain}"
         }
       }
 
