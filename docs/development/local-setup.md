@@ -113,7 +113,7 @@ pnpm dev
 
 ### MinIO Setup (Optional)
 
-For document upload testing:
+For document upload testing with local storage:
 
 ```bash
 # Install MinIO
@@ -127,6 +127,64 @@ brew install minio/stable/mc
 mc alias set local http://localhost:9000 minioadmin minioadmin
 mc mb local/documents
 ```
+
+### Google Cloud Storage with Service Account Impersonation (Recommended)
+
+For local development with real GCS buckets (matching production), use service account impersonation. This ensures you have the same permissions as the deployed application.
+
+#### Step 1: Grant Impersonation Permission
+
+First, grant your Google account permission to impersonate the backend service account:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  appart-backend@appart-agent-prod.iam.gserviceaccount.com \
+  --member="user:YOUR_EMAIL@gmail.com" \
+  --role="roles/iam.serviceAccountTokenCreator" \
+  --project=appart-agent-prod
+```
+
+#### Step 2: Login with Impersonation
+
+Generate Application Default Credentials (ADC) that impersonate the service account:
+
+```bash
+gcloud auth application-default login \
+  --impersonate-service-account=appart-backend@appart-agent-prod.iam.gserviceaccount.com
+```
+
+This creates credentials at `~/.config/gcloud/application_default_credentials.json`.
+
+#### Step 3: Start with GCS Backend
+
+```bash
+# Using the dev script
+./dev.sh start-gcs
+
+# Or manually with docker-compose
+docker-compose -f docker-compose.yml -f docker-compose.gcs.yml up -d
+```
+
+The `docker-compose.gcs.yml` automatically mounts your ADC credentials into the container.
+
+#### Step 4: Configure GCS Buckets
+
+In your `.env` file:
+
+```bash
+STORAGE_BACKEND=gcs
+GCS_DOCUMENTS_BUCKET=your-project-documents
+GCS_PHOTOS_BUCKET=your-project-photos
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=europe-west1
+GEMINI_USE_VERTEXAI=true
+```
+
+!!! tip "Benefits of Service Account Impersonation"
+    - **Consistent permissions**: Test with the exact same permissions as production
+    - **No key management**: No need to download or rotate service account keys
+    - **Audit trail**: All actions are logged under your identity, impersonating the service account
+    - **Easy revocation**: Remove impersonation access without affecting the service account
 
 ## IDE Setup
 

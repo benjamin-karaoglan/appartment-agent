@@ -68,6 +68,35 @@ docker-compose exec backend alembic upgrade head
 !!! success "You're ready!"
     The application is now running. Continue to explore features or set up development environment.
 
+## Alternative: Use Google Cloud Storage
+
+For local development with real GCS buckets (recommended for testing production parity):
+
+```bash
+# 1. Setup service account impersonation (one-time)
+gcloud iam service-accounts add-iam-policy-binding \
+  appart-backend@YOUR_PROJECT.iam.gserviceaccount.com \
+  --member="user:YOUR_EMAIL@gmail.com" \
+  --role="roles/iam.serviceAccountTokenCreator" \
+  --project=YOUR_PROJECT
+
+# 2. Login with impersonation
+gcloud auth application-default login \
+  --impersonate-service-account=appart-backend@YOUR_PROJECT.iam.gserviceaccount.com
+
+# 3. Configure .env
+STORAGE_BACKEND=gcs
+GCS_DOCUMENTS_BUCKET=your-documents-bucket
+GCS_PHOTOS_BUCKET=your-photos-bucket
+GOOGLE_CLOUD_PROJECT=your-project-id
+GEMINI_USE_VERTEXAI=true
+
+# 4. Start with GCS
+./dev.sh start-gcs
+```
+
+See [Local Setup - GCS with Impersonation](../development/local-setup.md#google-cloud-storage-with-service-account-impersonation-recommended) for detailed instructions.
+
 ## Next Steps
 
 - [Import DVF Data](../backend/dvf-data.md) for price analysis features

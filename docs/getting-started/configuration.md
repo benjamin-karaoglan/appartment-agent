@@ -131,6 +131,46 @@ GEMINI_USE_VERTEXAI=true
 # Uses Vertex AI with service account
 ```
 
+### Local Development with GCS (Service Account Impersonation)
+
+For testing locally with real GCP services while maintaining production parity:
+
+```bash
+# .env
+ENVIRONMENT=development
+LOG_LEVEL=DEBUG
+STORAGE_BACKEND=gcs
+GEMINI_USE_VERTEXAI=true
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=europe-west1
+GCS_DOCUMENTS_BUCKET=your-project-documents
+GCS_PHOTOS_BUCKET=your-project-photos
+```
+
+**Setup impersonation** (one-time):
+
+```bash
+# 1. Grant yourself permission to impersonate the backend service account
+gcloud iam service-accounts add-iam-policy-binding \
+  appart-backend@your-project-id.iam.gserviceaccount.com \
+  --member="user:your-email@gmail.com" \
+  --role="roles/iam.serviceAccountTokenCreator" \
+  --project=your-project-id
+
+# 2. Login with impersonation
+gcloud auth application-default login \
+  --impersonate-service-account=appart-backend@your-project-id.iam.gserviceaccount.com
+
+# 3. Start with GCS backend
+./dev.sh start-gcs
+```
+
+!!! tip "Why use impersonation?"
+    - Test with the exact same permissions as production
+    - No service account key files to manage or secure
+    - Easy to revoke access without affecting the service account
+    - All actions logged under your identity for audit purposes
+
 ## Security Best Practices
 
 !!! danger "Never commit secrets"

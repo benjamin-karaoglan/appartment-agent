@@ -76,6 +76,7 @@ nav:
     - deployment/index.md
     - Docker: deployment/docker.md
     - GCP Cloud Run: deployment/gcp.md
+    - Infrastructure (Terraform): deployment/infrastructure.md
   - Development:
     - development/index.md
     - Local Setup: development/local-setup.md

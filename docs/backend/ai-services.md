@@ -15,21 +15,30 @@ AppArt Agent uses Google Gemini for document analysis, classification, and image
 flowchart TB
     subgraph AILayer["AI Service Layer"]
         subgraph Services["Services"]
-            DA["DocumentAnalyzer<br/>• classify()<br/>• analyze()<br/>• synthesize()"]
-            DP["DocumentProcessor<br/>• process()<br/>• bulk_process()"]
-            IG["ImageGenerator<br/>• generate()<br/>• redesign()"]
+            DA["DocumentAnalyzer<br/>classify() | analyze() | synthesize()"]
+            DP["DocumentProcessor<br/>process() | bulk_process()"]
+            IG["ImageGenerator<br/>generate() | redesign()"]
         end
         SDK["Google Generative AI SDK"]
     end
 
+    subgraph Auth["Authentication"]
+        APIKey["API Key<br/>(Local Dev)"]
+        VertexAI["Vertex AI<br/>(Production)"]
+        Impersonation["Service Account<br/>Impersonation"]
+    end
+
     subgraph External["External API"]
-        Gemini["Google Gemini API<br/>or Vertex AI"]
+        Gemini["Google Gemini<br/>gemini-2.0-flash-lite<br/>gemini-2.0-flash-exp"]
     end
 
     DA --> SDK
     DP --> SDK
     IG --> SDK
-    SDK --> Gemini
+    SDK --> Auth
+    APIKey --> Gemini
+    VertexAI --> Gemini
+    Impersonation --> VertexAI
 ```
 
 ## Document Analyzer
@@ -233,6 +242,44 @@ GEMINI_USE_VERTEXAI=true                    # Use Vertex AI
 GOOGLE_CLOUD_PROJECT=your_project           # Required for Vertex AI
 GOOGLE_CLOUD_LOCATION=us-central1           # Vertex AI region
 ```
+
+### Authentication Methods
+
+| Method | Use Case | Configuration |
+|--------|----------|---------------|
+| **API Key** | Local development (simple) | `GOOGLE_CLOUD_API_KEY` |
+| **Vertex AI + Impersonation** | Local development (production parity) | See below |
+| **Vertex AI + Service Account** | Production (Cloud Run) | Automatic via attached SA |
+
+### Local Development with Vertex AI (Recommended)
+
+For testing with the same Vertex AI setup as production, use service account impersonation:
+
+```bash
+# 1. Grant impersonation permission (one-time)
+gcloud iam service-accounts add-iam-policy-binding \
+  appart-backend@YOUR_PROJECT.iam.gserviceaccount.com \
+  --member="user:YOUR_EMAIL@gmail.com" \
+  --role="roles/iam.serviceAccountTokenCreator" \
+  --project=YOUR_PROJECT
+
+# 2. Login with impersonation
+gcloud auth application-default login \
+  --impersonate-service-account=appart-backend@YOUR_PROJECT.iam.gserviceaccount.com
+
+# 3. Configure environment
+GEMINI_USE_VERTEXAI=true
+GOOGLE_CLOUD_PROJECT=YOUR_PROJECT
+GOOGLE_CLOUD_LOCATION=europe-west1
+
+# 4. Start with GCS (uses ADC automatically)
+./dev.sh start-gcs
+```
+
+This ensures you test with:
+- Same Vertex AI models as production
+- Same IAM permissions as the deployed service
+- No API key management required
 
 ### Token Limits
 
