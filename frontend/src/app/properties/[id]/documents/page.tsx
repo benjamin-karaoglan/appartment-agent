@@ -102,7 +102,6 @@ const DOCUMENT_CATEGORIES = [
     description: 'Assembly meeting minutes',
     icon: FileText,
     acceptedTypes: '.pdf',
-    hasSubcategory: false,
   },
   {
     id: 'diags',
@@ -110,7 +109,6 @@ const DOCUMENT_CATEGORIES = [
     description: 'Diagnostic documents',
     icon: FileText,
     acceptedTypes: '.pdf',
-    hasSubcategory: false,
   },
   {
     id: 'taxe_fonciere',
@@ -118,7 +116,6 @@ const DOCUMENT_CATEGORIES = [
     description: 'Property tax documents',
     icon: FileText,
     acceptedTypes: '.pdf',
-    hasSubcategory: false,
   },
   {
     id: 'charges',
@@ -126,7 +123,6 @@ const DOCUMENT_CATEGORIES = [
     description: 'Condominium charges',
     icon: FileText,
     acceptedTypes: '.pdf',
-    hasSubcategory: false,
   },
 ];
 
@@ -141,7 +137,6 @@ function DocumentsPageContent() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [selectedSubcategory, setSelectedSubcategory] = useState<Record<string, string>>({});
   const [regenerating, setRegenerating] = useState<string | null>(null);
 
   // Smart upload states
@@ -217,12 +212,6 @@ function DocumentsPageContent() {
         formData.append('file', file);
         formData.append('property_id', propertyId);
         formData.append('document_category', category);
-
-        // Add subcategory if required
-        if (category === 'diags' && selectedSubcategory[category]) {
-          formData.append('document_subcategory', selectedSubcategory[category]);
-        }
-
         formData.append('auto_parse', 'true');
 
         await api.post('/api/documents/upload', formData, {
@@ -788,44 +777,21 @@ function DocumentsPageContent() {
                   <div className="p-6">
                     <div className="mb-6">
                       <div className="flex items-start gap-4">
-                        {category.hasSubcategory && (
-                          <div className="flex-1">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Diagnostic Type
-                            </label>
-                            <select
-                              value={selectedSubcategory[category.id] || ''}
-                              onChange={(e) => setSelectedSubcategory({
-                                ...selectedSubcategory,
-                                [category.id]: e.target.value
-                              })}
-                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900"
-                            >
-                              <option value="">Select diagnostic type...</option>
-                              {category.subcategories?.map((sub) => (
-                                <option key={sub.value} value={sub.value}>
-                                  {sub.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-
-                        <div className={category.hasSubcategory ? 'flex-1' : 'flex-1'}>
+                        <div className="flex-1">
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Upload Document{!category.hasSubcategory && 's'}
+                            Upload Documents
                           </label>
                           <label className="relative cursor-pointer">
                             <input
                               type="file"
                               accept={category.acceptedTypes}
-                              multiple={!category.hasSubcategory}
+                              multiple
                               onChange={(e) => handleFileUpload(category.id, e.target.files)}
-                              disabled={uploading === category.id || (category.hasSubcategory && !selectedSubcategory[category.id])}
+                              disabled={uploading === category.id}
                               className="hidden"
                             />
                             <div className={`flex items-center justify-center px-4 py-2 border-2 border-dashed rounded-md ${
-                              uploading === category.id || (category.hasSubcategory && !selectedSubcategory[category.id])
+                              uploading === category.id
                                 ? 'border-gray-300 bg-gray-50 cursor-not-allowed'
                                 : 'border-blue-300 hover:border-blue-500 bg-blue-50 hover:bg-blue-100'
                             }`}>
@@ -838,10 +804,7 @@ function DocumentsPageContent() {
                                 <>
                                   <Upload className="h-5 w-5 mr-2 text-blue-600" />
                                   <span className="text-sm text-blue-600">
-                                    {category.hasSubcategory && !selectedSubcategory[category.id]
-                                      ? 'Select type first'
-                                      : `Choose ${category.acceptedTypes} file${!category.hasSubcategory ? 's' : ''}`
-                                    }
+                                    Choose {category.acceptedTypes} files
                                   </span>
                                 </>
                               )}
