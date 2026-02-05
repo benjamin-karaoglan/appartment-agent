@@ -4,29 +4,29 @@
 
 #### Bugs: 
 
-- [] Loading bar disapering
-- [] Bulk Load failing
+- [ ] Loading bar disapering
+- [ ] Bulk Load failing
 
 #### Feature:
 
--[] Smart summary &rarr; enable to recreate
+- [ ] Smart summary &rarr; enable to recreate
 
 ### Redesign studio:
 
 #### Bugs:
 
-- [] Uploading an image while running a redesign
-- [] Switching while running a redesign
+- [ ] Uploading an image while running a redesign
+- [ ] Switching while running a redesign
 
 #### Feature:
 
-- [] Multiturn redesign
+- [ ] Multiturn redesign
 
 ### Infrastructure:
 
-- [] Revise naming
-- [] Import dvf data to CloudSQL
+- [ ] Revise naming
+- [ ] Import dvf data to CloudSQL
 
 ### Various:
 
-- [] Update email to use gmail workspace domain
+- [ ] Update email to use gmail workspace domain
