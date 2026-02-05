@@ -110,15 +110,7 @@ const DOCUMENT_CATEGORIES = [
     description: 'Diagnostic documents',
     icon: FileText,
     acceptedTypes: '.pdf',
-    hasSubcategory: true,
-    subcategories: [
-      { value: 'dpe', label: 'DPE (Energy Performance)' },
-      { value: 'amiante', label: 'Amiante (Asbestos)' },
-      { value: 'plomb', label: 'Plomb (Lead)' },
-      { value: 'termite', label: 'Termite' },
-      { value: 'electric', label: 'Electrical' },
-      { value: 'gas', label: 'Gas' },
-    ],
+    hasSubcategory: false,
   },
   {
     id: 'taxe_fonciere',
@@ -807,7 +799,7 @@ function DocumentsPageContent() {
                                 ...selectedSubcategory,
                                 [category.id]: e.target.value
                               })}
-                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900"
                             >
                               <option value="">Select diagnostic type...</option>
                               {category.subcategories?.map((sub) => (

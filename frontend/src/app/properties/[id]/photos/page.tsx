@@ -264,7 +264,7 @@ function PhotosContent() {
                 <select
                   value={roomType}
                   onChange={(e) => setRoomType(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="living room">Living Room</option>
                   <option value="bedroom">Bedroom</option>
@@ -391,7 +391,7 @@ function PhotosContent() {
                           value={roomType}
                           onChange={(e) => handleRoomTypeChange(e.target.value)}
                           disabled={savingRoomType}
-                          className="w-44 px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
+                          className="w-44 px-3 py-2 border border-gray-300 rounded-md text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
                         >
                           <option value="living room">Living Room</option>
                           <option value="bedroom">Bedroom</option>
@@ -461,7 +461,7 @@ function PhotosContent() {
                         }}
                         placeholder="Describe your desired redesign in detail..."
                         rows={6}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Tip: Describe the scene, don&apos;t just list keywords
