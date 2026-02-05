@@ -143,7 +143,17 @@ class DocumentParser:
             config=self._get_config(),
         )
 
-        return json.loads(self._extract_json(self._extract_text(response)))
+        response_text = self._extract_text(response)
+        if not response_text:
+            logger.warning("Empty response from AI model")
+            raise ValueError("AI model returned empty response")
+
+        json_text = self._extract_json(response_text)
+        if not json_text or not json_text.strip():
+            logger.warning(f"Could not extract JSON from response: {response_text[:500]}")
+            raise ValueError("Could not extract JSON from AI response")
+
+        return json.loads(json_text)
 
     async def parse_pv_ag_multimodal(self, pdf_path: str, storage_key: str = None, storage_bucket: str = None) -> Dict[str, Any]:
         """Parse PV d'AG using multimodal approach."""

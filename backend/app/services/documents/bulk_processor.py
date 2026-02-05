@@ -135,7 +135,7 @@ class BulkProcessor:
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, storage.download_file, minio_key)
 
-        tasks = [download_one(upload["minio_key"]) for upload in document_uploads]
+        tasks = [download_one(upload["storage_key"]) for upload in document_uploads]
         return await asyncio.gather(*tasks)
 
     async def _convert_pdfs(self, file_data_list: List[bytes]) -> List[List[str]]:
