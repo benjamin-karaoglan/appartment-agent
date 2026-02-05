@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.photo import Photo, PhotoRedesign
 from app.models.property import Property
+from app.models.user import User
 from app.schemas.photo import (
     PhotoResponse,
     PhotoListResponse,
@@ -85,19 +86,31 @@ async def upload_photo(
         file_data = await file.read()
         file_size = len(file_data)
 
-        # Upload to MinIO
-        minio_key = get_storage_service().upload_file(
+        # Get user UUID for path structure
+        user = db.query(User).filter(User.id == int(current_user)).first()
+        if not user or not user.uuid:
+            raise HTTPException(status_code=500, detail="User UUID not found")
+        user_uuid = user.uuid
+
+        # Generate UUID for the photo path
+        photo_uuid = str(uuid.uuid4())
+
+        # Upload to storage with structured path: {user_uuid}/photos/{photo_uuid}/{filename}
+        storage_service = get_storage_service()
+        storage_key = f"{user_uuid}/photos/{photo_uuid}/{file.filename}"
+        storage_service.upload_file(
             file_data=file_data,
-            filename=file.filename,
+            filename=storage_key,
             bucket_name="photos"
         )
 
-        # Create database record
+        # Create database record with storage info
         photo = Photo(
+            uuid=photo_uuid,
             user_id=int(current_user),
             property_id=property_id,
             filename=file.filename,
-            storage_key=minio_key,
+            storage_key=storage_key,
             storage_bucket="photos",
             file_size=file_size,
             mime_type=file.content_type,
@@ -172,6 +185,12 @@ async def create_redesign(
             detail="Photo not found"
         )
 
+    # Get user UUID for path structure
+    user = db.query(User).filter(User.id == int(current_user)).first()
+    if not user or not user.uuid:
+        raise HTTPException(status_code=500, detail="User UUID not found")
+    user_uuid = user.uuid
+
     # Validate request
     if not request.style_preset and not request.custom_prompt:
         raise HTTPException(
@@ -230,11 +249,12 @@ async def create_redesign(
         generation_time_ms = int((time.time() - start_time) * 1000)
 
         redesign_uuid = str(uuid.uuid4())
-        # Upload generated image to MinIO
+        # Upload generated image with nested path: {user_uuid}/photos/{photo_uuid}/redesigns/{redesign_uuid}/{filename}
         generated_filename = f"redesign_{redesign_uuid}.png"
-        redesign_minio_key = get_storage_service().upload_file(
+        storage_key = f"{user_uuid}/photos/{photo.uuid}/redesigns/{redesign_uuid}/{generated_filename}"
+        get_storage_service().upload_file(
             file_data=result["image_data"],
-            filename=generated_filename,
+            filename=storage_key,
             bucket_name="photos"
         )
 
@@ -253,7 +273,7 @@ async def create_redesign(
         redesign = PhotoRedesign(
             photo_id=photo_id,
             redesign_uuid=redesign_uuid,
-            storage_key=redesign_minio_key,
+            storage_key=storage_key,
             storage_bucket="photos",
             file_size=len(result["image_data"]),
             style_preset=request.style_preset,
@@ -267,6 +287,10 @@ async def create_redesign(
         )
 
         db.add(redesign)
+
+        # Increment user's redesigns generated count
+        user.redesigns_generated_count = (user.redesigns_generated_count or 0) + 1
+
         db.commit()
         db.refresh(redesign)
 

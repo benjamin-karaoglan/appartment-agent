@@ -55,6 +55,7 @@ class UserResponse(BaseModel):
 class UserStatsResponse(BaseModel):
     """User statistics response schema."""
     documents_analyzed_count: int
+    redesigns_generated_count: int
     total_properties: int
 
 
@@ -164,5 +165,6 @@ async def get_user_stats(
 
     return UserStatsResponse(
         documents_analyzed_count=user.documents_analyzed_count or 0,
+        redesigns_generated_count=user.redesigns_generated_count or 0,
         total_properties=property_count
     )

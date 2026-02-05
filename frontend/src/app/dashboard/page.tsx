@@ -6,11 +6,12 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
-import { Plus, Home, FileText, TrendingUp, Trash2 } from 'lucide-react';
+import { Plus, Home, FileText, TrendingUp, Trash2, Palette } from 'lucide-react';
 import type { Property } from '@/types';
 
 interface UserStats {
   documents_analyzed_count: number;
+  redesigns_generated_count: number;
   total_properties: number;
 }
 
@@ -145,6 +146,26 @@ function DashboardContent() {
                       </dt>
                       <dd className="text-3xl font-semibold text-gray-900">
                         {userStats?.documents_analyzed_count ?? 0}
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Palette className="h-6 w-6 text-gray-400" />
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">
+                        Redesigns Generated
+                      </dt>
+                      <dd className="text-3xl font-semibold text-gray-900">
+                        {userStats?.redesigns_generated_count ?? 0}
                       </dd>
                     </dl>
                   </div>
