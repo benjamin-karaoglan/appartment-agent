@@ -267,9 +267,12 @@ class GCSBackend(StorageBackend):
     def _get_service_account_email(self) -> str:
         """Get the service account email for URL signing."""
         # Try to get service account email from credentials
+        # Note: compute engine credentials return 'default' which is not valid for signing
         if hasattr(self._credentials, 'service_account_email'):
-            return self._credentials.service_account_email
-        
+            email = self._credentials.service_account_email
+            if email and email != 'default':
+                return email
+
         # For compute engine credentials, fetch from metadata server
         try:
             import requests
@@ -279,10 +282,10 @@ class GCSBackend(StorageBackend):
                 timeout=5
             )
             if response.status_code == 200:
-                return response.text
+                return response.text.strip()
         except Exception as e:
             logger.warning(f"Could not fetch service account email from metadata: {e}")
-        
+
         # Fallback to default compute engine service account pattern
         return f"{settings.GOOGLE_CLOUD_PROJECT}@appspot.gserviceaccount.com"
 
@@ -359,13 +362,14 @@ class GCSBackend(StorageBackend):
     ) -> str:
         """
         Generate a signed URL for file access.
-        
+
         Uses IAM signBlob API when running with Application Default Credentials
         (e.g., on Cloud Run) since compute engine credentials don't have private keys.
         """
         from google.auth import compute_engine
         from google.auth.transport import requests as google_requests
-        
+        from google.auth import impersonated_credentials
+
         bucket = self._get_bucket(bucket_name)
 
         if expiry is None:
@@ -377,31 +381,27 @@ class GCSBackend(StorageBackend):
 
         try:
             blob = bucket.blob(object_name)
-            
+
             # Check if we're using compute engine credentials (ADC without private key)
             if isinstance(self._credentials, compute_engine.Credentials):
-                # Use IAM signBlob API for signing
-                # This requires the service account to have the iam.serviceAccounts.signBlob permission
-                from google.auth.iam import Signer
-                
-                # Refresh credentials to ensure we have a valid token
+                # Use signing credentials via impersonation
+                # This requires the service account to have Service Account Token Creator role on itself
                 auth_request = google_requests.Request()
                 self._credentials.refresh(auth_request)
-                
-                # Create IAM-based signer
-                signer = Signer(
-                    request=auth_request,
-                    credentials=self._credentials,
-                    service_account_email=self._service_account_email
+
+                # Create signing credentials that can sign blobs
+                signing_credentials = impersonated_credentials.Credentials(
+                    source_credentials=self._credentials,
+                    target_principal=self._service_account_email,
+                    target_scopes=['https://www.googleapis.com/auth/cloud-platform'],
                 )
-                
-                # Generate signed URL using the IAM signer
+
+                # Generate signed URL using the signing credentials
                 url = blob.generate_signed_url(
                     version="v4",
                     expiration=expires,
                     method="GET",
-                    service_account_email=self._service_account_email,
-                    access_token=self._credentials.token
+                    credentials=signing_credentials,
                 )
             else:
                 # Standard signed URL generation with service account key
@@ -410,7 +410,7 @@ class GCSBackend(StorageBackend):
                     expiration=expires,
                     method="GET"
                 )
-            
+
             return url
         except Exception as e:
             logger.error(f"GCS URL generation failed: {e}")

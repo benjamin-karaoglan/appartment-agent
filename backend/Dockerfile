@@ -118,4 +118,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
 
 # Production command (migrations run separately via Cloud Run Job)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# --proxy-headers: Trust X-Forwarded-Proto from Cloud Run to use correct HTTPS scheme in redirects
+# --forwarded-allow-ips=*: Trust forwarded headers from any IP (Cloud Run load balancer)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--proxy-headers", "--forwarded-allow-ips=*"]
