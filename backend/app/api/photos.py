@@ -1,6 +1,7 @@
 """Photos API routes for AI-powered apartment redesign using Gemini 2.5 Flash."""
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 import logging
@@ -354,6 +355,18 @@ async def list_photos(
 
     photos = query.order_by(Photo.uploaded_at.desc()).all()
 
+    # Single grouped query for all redesign counts (fixes N+1)
+    photo_ids = [photo.id for photo in photos]
+    redesign_counts: dict[int, int] = {}
+    if photo_ids:
+        rows = (
+            db.query(PhotoRedesign.photo_id, func.count(PhotoRedesign.id))
+            .filter(PhotoRedesign.photo_id.in_(photo_ids))
+            .group_by(PhotoRedesign.photo_id)
+            .all()
+        )
+        redesign_counts = {photo_id: cnt for photo_id, cnt in rows}
+
     # Build response with presigned URLs and redesign counts
     photo_responses = []
     for photo in photos:
@@ -362,10 +375,6 @@ async def list_photos(
             bucket_name=photo.storage_bucket,
             expiry=timedelta(hours=1)
         )
-
-        redesign_count = db.query(PhotoRedesign).filter(
-            PhotoRedesign.photo_id == photo.id
-        ).count()
 
         photo_responses.append(PhotoResponse(
             id=photo.id,
@@ -381,7 +390,7 @@ async def list_photos(
             description=photo.description,
             uploaded_at=photo.uploaded_at,
             presigned_url=presigned_url,
-            redesign_count=redesign_count
+            redesign_count=redesign_counts.get(photo.id, 0)
         ))
 
     return PhotoListResponse(

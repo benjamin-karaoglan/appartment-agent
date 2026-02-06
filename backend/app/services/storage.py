@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 
 from app.core.config import settings
 from app.core.logging import trace_storage_operation
+from app.core.cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 
@@ -498,8 +499,19 @@ class StorageService:
         bucket_name: Optional[str] = None,
         expiry=None
     ) -> str:
-        """Generate a presigned/signed URL for file access."""
-        return self._backend.get_presigned_url(minio_key, bucket_name, expiry)
+        """Generate a presigned/signed URL for file access (cached in Redis)."""
+        bucket = bucket_name or self._backend.default_bucket
+        cache_key = f"presigned_url:{bucket}:{minio_key}"
+
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        url = self._backend.get_presigned_url(minio_key, bucket_name, expiry)
+
+        # Cache for 50 min (safety margin vs typical 60-min URL expiry)
+        cache_set(cache_key, url, ttl=3000)
+        return url
 
     def get_file_url(self, object_name: str, expires_in: int = 3600) -> str:
         """Alias for get_presigned_url (backward compatibility)."""
