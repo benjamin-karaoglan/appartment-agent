@@ -551,7 +551,7 @@ resource "google_cloud_run_v2_service" "backend" {
 
     vpc_access {
       connector = google_vpc_access_connector.connector.id
-      egress    = "ALL_TRAFFIC"
+      egress    = "PRIVATE_RANGES_ONLY"  # Allow external traffic (e.g., Logfire) to bypass VPC
     }
 
     # Cloud SQL connection for Unix socket access

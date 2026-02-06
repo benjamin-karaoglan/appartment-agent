@@ -628,6 +628,15 @@ echo -n "your-logfire-token" | gcloud secrets versions add logfire-token --data-
 
 The backend automatically sends traces and logs to Logfire when `LOGFIRE_ENABLED=true`.
 
+!!! warning "VPC Egress Configuration"
+    Logfire requires external network access. The VPC connector must use `PRIVATE_RANGES_ONLY` egress
+    (not `ALL_TRAFFIC`) to allow the backend to reach `logfire-eu.pydantic.dev`. If using `ALL_TRAFFIC`,
+    you must configure Cloud NAT for the VPC.
+
+    The Terraform configuration uses `PRIVATE_RANGES_ONLY` by default, which routes only internal
+    traffic (Cloud SQL, Redis) through the VPC while allowing external traffic (Logfire, Vertex AI)
+    to use the default internet egress.
+
 ## Scaling Configuration
 
 ### Auto-scaling Settings
@@ -823,6 +832,24 @@ gcloud run domain-mappings describe --domain yourdomain.com --region $REGION
 # Verify domain ownership
 gcloud domains verify yourdomain.com
 ```
+
+#### Logfire/External Service Unreachable
+
+If you see errors like `Network is unreachable` for external services (Logfire, external APIs):
+
+```bash
+# Check current VPC egress setting
+gcloud run services describe appart-backend --region $REGION \
+  --format='value(spec.template.metadata.annotations."run.googleapis.com/vpc-access-egress")'
+
+# Fix: Change to PRIVATE_RANGES_ONLY to allow external traffic
+gcloud run services update appart-backend --region $REGION \
+  --vpc-egress=private-ranges-only
+```
+
+The VPC egress options:
+- `PRIVATE_RANGES_ONLY` (recommended): Only internal traffic goes through VPC, external traffic uses default egress
+- `ALL_TRAFFIC`: All traffic goes through VPC (requires Cloud NAT for external access)
 
 ### Health Checks
 
