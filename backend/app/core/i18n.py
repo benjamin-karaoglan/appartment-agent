@@ -57,6 +57,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "fr": "Impossible de valider les identifiants",
         "en": "Could not validate credentials",
     },
+    "not_authenticated": {
+        "fr": "Non authentifié",
+        "en": "Not authenticated",
+    },
     # ── Properties ────────────────────────────────────────────────────────
     "property_not_found": {
         "fr": "Bien non trouvé",

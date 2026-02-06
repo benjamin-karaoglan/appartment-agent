@@ -244,6 +244,47 @@ Start with: `./dev.sh start-gcs`
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Better Auth (authentication via Next.js)
+DATABASE_URL=postgresql://appart:appart@db:5432/appart_agent
+BETTER_AUTH_SECRET=your-better-auth-secret-at-least-32-characters
+
+# Google OAuth (optional - from Google Cloud Console)
+GOOGLE_CLIENT_ID=your-google-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+```
+
+</details>
+
+<details>
+<summary><b>Authentication Setup (Better Auth + Google OAuth)</b></summary>
+
+Authentication is handled by [Better Auth](https://www.better-auth.com/) via Next.js API routes.
+The backend validates sessions by checking the `better-auth.session_token` cookie against the database.
+
+**Email/Password:** Works out of the box. Set `BETTER_AUTH_SECRET` and run database migrations.
+
+**Google OAuth (optional):**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create an OAuth 2.0 Client ID (Web application type)
+3. Add authorized redirect URIs:
+   - `http://localhost:3000/api/auth/callback/google` (local)
+   - `https://your-frontend-url/api/auth/callback/google` (production)
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`
+
+**Database migrations:** Better Auth tables are created by Alembic:
+
+```bash
+docker-compose exec backend alembic upgrade head
+```
+
+**Migrate existing users to Better Auth:**
+
+```bash
+docker-compose exec backend python scripts/migrate_users_to_better_auth.py --dry-run
+docker-compose exec backend python scripts/migrate_users_to_better_auth.py
 ```
 
 </details>

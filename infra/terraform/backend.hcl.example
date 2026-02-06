@@ -13,7 +13,7 @@
 
 # GCS bucket for storing Terraform state
 # Created by: ./scripts/setup-remote-state.sh <PROJECT_ID>
-bucket = "YOUR_PROJECT_ID-appart-tfstate"
+bucket = "YOUR_PROJECT_ID-appartagent-tfstate"
 
 # Prefix (path) within the bucket for the state file
 prefix = "terraform/state"

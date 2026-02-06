@@ -34,12 +34,15 @@
       "passwordPlaceholder": "Mot de passe",
       "submit": "Se connecter",
       "submitting": "Connexion en cours...",
+      "googleButton": "Continuer avec Google",
+      "googleLoading": "Connexion à Google...",
       "errors": {
         "emailRequired": "L'email est requis",
         "emailInvalid": "Adresse email invalide",
         "passwordRequired": "Le mot de passe est requis",
         "passwordMinLength": "Le mot de passe doit contenir au moins {min} caractères",
-        "invalidCredentials": "Email ou mot de passe incorrect"
+        "invalidCredentials": "Email ou mot de passe incorrect",
+        "googleFailed": "La connexion Google a échoué. Veuillez réessayer."
       }
     },
     "register": {
@@ -53,6 +56,8 @@
       "confirmPassword": "Confirmer le mot de passe",
       "submit": "Créer un compte",
       "submitting": "Création du compte...",
+      "googleButton": "S'inscrire avec Google",
+      "googleLoading": "Connexion à Google...",
       "errors": {
         "fullNameRequired": "Le nom complet est requis",
         "fullNameMinLength": "Le nom doit contenir au moins {min} caractères",
@@ -62,7 +67,8 @@
         "passwordMinLength": "Le mot de passe doit contenir au moins {min} caractères",
         "confirmPasswordRequired": "Veuillez confirmer votre mot de passe",
         "passwordsMismatch": "Les mots de passe ne correspondent pas",
-        "registrationFailed": "L'inscription a échoué. Veuillez réessayer."
+        "registrationFailed": "L'inscription a échoué. Veuillez réessayer.",
+        "googleFailed": "L'inscription Google a échoué. Veuillez réessayer."
       }
     }
   },

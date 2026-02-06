@@ -1,15 +1,20 @@
 ## TODO
 
+### Dashboard
+
+- [ ] Enable to get an overview of property: State, price, photos
+
 ### Documents
 
 #### Bugs
 
-- [ ] Loading bar disapering
-- [ ] Bulk Load failing
+- [X] Loading bar disapering
+- [X] Bulk Load failing
 
 #### Feature
 
 - [ ] Smart summary &rarr; enable to recreate
+- [ ] Rethink the whole functionality
 
 ### Redesign studio
 
@@ -20,7 +25,7 @@
 
 #### Feature
 
-- [ ] Multiturn redesign
+- [X] Multiturn redesign
 
 ### Infrastructure
 
@@ -30,3 +35,4 @@
 ### Various
 
 - [ ] Update email to use gmail workspace domain
+- [ ] Add demos (gif) + images (assets)

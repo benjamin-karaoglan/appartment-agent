@@ -101,6 +101,20 @@ variable "logfire_token" {
   sensitive   = true
 }
 
+variable "google_oauth_client_id" {
+  description = "Google OAuth 2.0 Client ID (optional)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "google_oauth_client_secret" {
+  description = "Google OAuth 2.0 Client Secret (optional)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "min_instances" {
   description = "Minimum instances for Cloud Run services. Set to 1 for always-on (better latency, ~$50/month/service), 0 for scale-to-zero (cold starts, lower cost)"
   type        = number
@@ -255,6 +269,7 @@ resource "google_service_account_iam_member" "backend_token_creator" {
 # Frontend permissions
 resource "google_project_iam_member" "frontend_permissions" {
   for_each = toset([
+    "roles/cloudsql.client",
     "roles/secretmanager.secretAccessor",
     "roles/logging.logWriter",
   ])
@@ -396,6 +411,8 @@ resource "google_redis_instance" "cache" {
 # =============================================================================
 
 locals {
+  google_oauth_enabled = var.google_oauth_client_id != "" && var.google_oauth_client_secret != ""
+
   # CORS origins - include custom domain if configured
   # Note: We use the known domain patterns rather than referencing the frontend
   # resource to avoid circular dependencies (backend -> buckets -> frontend -> backend)
@@ -533,6 +550,93 @@ resource "google_secret_manager_secret_version" "logfire_token" {
   secret_data = var.logfire_token
 }
 
+resource "random_password" "better_auth_secret" {
+  length  = 64
+  special = false
+}
+
+# Better Auth Secret
+resource "google_secret_manager_secret" "better_auth_secret" {
+  secret_id = "better-auth-secret"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "better_auth_secret" {
+  secret      = google_secret_manager_secret.better_auth_secret.id
+  secret_data = random_password.better_auth_secret.result
+}
+
+# Google OAuth Client ID
+resource "google_secret_manager_secret" "google_oauth_client_id" {
+  secret_id = "google-oauth-client-id"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# Google OAuth Client Secret
+resource "google_secret_manager_secret" "google_oauth_client_secret" {
+  secret_id = "google-oauth-client-secret"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# Optional: set initial Google OAuth secrets via variables
+resource "google_secret_manager_secret_version" "google_oauth_client_id" {
+  count = var.google_oauth_client_id != "" ? 1 : 0
+
+  secret      = google_secret_manager_secret.google_oauth_client_id.id
+  secret_data = var.google_oauth_client_id
+}
+
+resource "google_secret_manager_secret_version" "google_oauth_client_secret" {
+  count = var.google_oauth_client_secret != "" ? 1 : 0
+
+  secret      = google_secret_manager_secret.google_oauth_client_secret.id
+  secret_data = var.google_oauth_client_secret
+}
+
+# Grant frontend service account access to new secrets
+resource "google_secret_manager_secret_iam_member" "frontend_better_auth_secret" {
+  secret_id = google_secret_manager_secret.better_auth_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.frontend.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "frontend_google_oauth_client_id" {
+  count = local.google_oauth_enabled ? 1 : 0
+
+  secret_id = google_secret_manager_secret.google_oauth_client_id.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.frontend.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "frontend_google_oauth_client_secret" {
+  count = local.google_oauth_enabled ? 1 : 0
+
+  secret_id = google_secret_manager_secret.google_oauth_client_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.frontend.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "frontend_database_url" {
+  secret_id = google_secret_manager_secret.database_url.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.frontend.email}"
+}
+
 # =============================================================================
 # Cloud Run - Backend
 # =============================================================================
@@ -605,6 +709,11 @@ resource "google_cloud_run_v2_service" "backend" {
       }
 
       env {
+        name  = "GEMINI_LLM_MODEL"
+        value = "gemini-2.5-flash"
+      }
+
+      env {
         name  = "GEMINI_IMAGE_MODEL"
         value = "gemini-2.5-flash-image"
       }
@@ -654,17 +763,23 @@ resource "google_cloud_run_v2_service" "backend" {
         }
       }
 
-      env {
-        name  = "LOGFIRE_ENABLED"
-        value = "true"
+      dynamic "env" {
+        for_each = var.logfire_token != "" ? [1] : []
+        content {
+          name  = "LOGFIRE_ENABLED"
+          value = "true"
+        }
       }
 
-      env {
-        name = "LOGFIRE_TOKEN"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.logfire_token.secret_id
-            version = "latest"
+      dynamic "env" {
+        for_each = var.logfire_token != "" ? [1] : []
+        content {
+          name = "LOGFIRE_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.logfire_token.secret_id
+              version = "latest"
+            }
           }
         }
       }
@@ -831,6 +946,14 @@ resource "google_cloud_run_v2_service" "frontend" {
   template {
     service_account = google_service_account.frontend.email
 
+    # Cloud SQL connection for Better Auth database access
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.postgres.connection_name]
+      }
+    }
+
     scaling {
       min_instance_count = var.min_instances
       max_instance_count = 10
@@ -855,14 +978,93 @@ resource "google_cloud_run_v2_service" "frontend" {
         value = var.domain != "" ? "https://${var.api_subdomain}.${var.domain}" : google_cloud_run_v2_service.backend.uri
       }
 
+      # NEXT_PUBLIC_APP_URL: set only when custom domain is configured.
+      # Without a domain, auth-client.ts uses window.location.origin (client)
+      # and localhost:3000 (server-side, correct inside the container).
+      dynamic "env" {
+        for_each = var.domain != "" ? [1] : []
+        content {
+          name  = "NEXT_PUBLIC_APP_URL"
+          value = "https://${var.domain}"
+        }
+      }
+
       env {
         name  = "NODE_ENV"
         value = "production"
       }
+
+      # Better Auth configuration
+      dynamic "env" {
+        for_each = var.domain != "" ? [1] : []
+        content {
+          name  = "BETTER_AUTH_URL"
+          value = "https://${var.domain}"
+        }
+      }
+
+      env {
+        name = "BETTER_AUTH_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.better_auth_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "DATABASE_URL"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.database_url.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      dynamic "env" {
+        for_each = local.google_oauth_enabled ? [1] : []
+        content {
+          name = "GOOGLE_CLIENT_ID"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.google_oauth_client_id.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
+      dynamic "env" {
+        for_each = local.google_oauth_enabled ? [1] : []
+        content {
+          name = "GOOGLE_CLIENT_SECRET"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.google_oauth_client_secret.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
+      dynamic "env" {
+        for_each = local.google_oauth_enabled ? [1] : []
+        content {
+          name  = "NEXT_PUBLIC_GOOGLE_AUTH_ENABLED"
+          value = "true"
+        }
+      }
     }
   }
 
-  depends_on = [google_cloud_run_v2_service.backend]
+  depends_on = [
+    google_cloud_run_v2_service.backend,
+    google_secret_manager_secret_version.database_url,
+    google_secret_manager_secret_version.better_auth_secret,
+    google_sql_database.database,
+  ]
 }
 
 # Allow unauthenticated access to frontend

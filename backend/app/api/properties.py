@@ -7,9 +7,9 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.better_auth_security import get_current_user_hybrid as get_current_user
 from app.core.database import get_db
 from app.core.i18n import get_local, translate
-from app.core.security import get_current_user
 from app.models.property import DVFRecord, DVFStats, Property
 from app.schemas.property import (
     DVFGroupedTransactionResponse,

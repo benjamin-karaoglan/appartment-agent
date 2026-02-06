@@ -131,6 +131,28 @@ api_subdomain = "api"
 logfire_token = ""
 
 # =============================================================================
+# OPTIONAL: GOOGLE OAUTH
+# =============================================================================
+
+# Google OAuth credentials for "Sign in with Google" (optional)
+# Email/password authentication works without these.
+#
+# Setup:
+#   1. Go to Google Cloud Console > APIs & Services > Credentials
+#   2. Create an OAuth 2.0 Client ID (Web application type)
+#   3. Add authorized redirect URIs:
+#      - https://YOUR_DOMAIN/api/auth/callback/google
+#      - https://YOUR_CLOUD_RUN_URL/api/auth/callback/google
+#   4. Set the values below
+#
+# Alternatively, set after deployment via:
+#   echo -n 'CLIENT_ID' | gcloud secrets versions add google-oauth-client-id --data-file=-
+#   echo -n 'CLIENT_SECRET' | gcloud secrets versions add google-oauth-client-secret --data-file=-
+
+# google_oauth_client_id     = ""
+# google_oauth_client_secret = ""
+
+# =============================================================================
 # COST ESTIMATION (approximate monthly costs)
 # =============================================================================
 #

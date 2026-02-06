@@ -7,15 +7,12 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Include credentials (cookies) in cross-origin requests
+  withCredentials: true,
 })
 
-// Add auth token and locale to requests
+// Add locale to requests (no more token handling - Better Auth uses cookies)
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-
   // Send current locale as Accept-Language header
   if (typeof document !== 'undefined') {
     const htmlLang = document.documentElement.lang
@@ -27,16 +24,16 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Auth API
+// Auth API (deprecated - use Better Auth client instead)
 export const authAPI = {
   register: async (data: { email: string; password: string; full_name: string }) => {
-    const response = await api.post('/api/users/register', data)
-    return response.data
+    // This is now handled by Better Auth
+    throw new Error('Use Better Auth signUp.email() instead')
   },
 
   login: async (data: { email: string; password: string }) => {
-    const response = await api.post('/api/users/login', data)
-    return response.data
+    // This is now handled by Better Auth
+    throw new Error('Use Better Auth signIn.email() instead')
   },
 
   getCurrentUser: async () => {

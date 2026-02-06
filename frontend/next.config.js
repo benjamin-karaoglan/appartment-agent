@@ -22,18 +22,9 @@ const nextConfig = {
       },
     ],
   },
-  async rewrites() {
-    // Only apply rewrites in development
-    if (process.env.NODE_ENV === 'development') {
-      return [
-        {
-          source: '/api/:path*',
-          destination: (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/:path*',
-        },
-      ]
-    }
-    return []
-  },
+  // No rewrites needed:
+  // - Backend API calls use NEXT_PUBLIC_API_URL directly via axios (lib/api.ts)
+  // - /api/auth/* is handled by Next.js API routes (Better Auth)
 }
 
 module.exports = withNextIntl(nextConfig)

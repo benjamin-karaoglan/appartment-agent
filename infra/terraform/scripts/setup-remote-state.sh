@@ -13,7 +13,7 @@
 #   ./scripts/setup-remote-state.sh my-gcp-project europe-west1
 #
 # What it does:
-#   1. Creates a GCS bucket named <PROJECT_ID>-appart-tfstate
+#   1. Creates a GCS bucket named <PROJECT_ID>-appartagent-tfstate
 #   2. Enables object versioning (for state recovery)
 #   3. Sets a 90-day lifecycle policy on non-current versions
 #   4. Generates a backend.hcl file for terraform init

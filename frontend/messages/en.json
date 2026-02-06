@@ -34,12 +34,15 @@
       "passwordPlaceholder": "Password",
       "submit": "Sign in",
       "submitting": "Signing in...",
+      "googleButton": "Continue with Google",
+      "googleLoading": "Connecting to Google...",
       "errors": {
         "emailRequired": "Email is required",
         "emailInvalid": "Invalid email address",
         "passwordRequired": "Password is required",
         "passwordMinLength": "Password must be at least {min} characters",
-        "invalidCredentials": "Invalid email or password"
+        "invalidCredentials": "Invalid email or password",
+        "googleFailed": "Google sign-in failed. Please try again."
       }
     },
     "register": {
@@ -53,6 +56,8 @@
       "confirmPassword": "Confirm Password",
       "submit": "Create account",
       "submitting": "Creating account...",
+      "googleButton": "Sign up with Google",
+      "googleLoading": "Connecting to Google...",
       "errors": {
         "fullNameRequired": "Full name is required",
         "fullNameMinLength": "Name must be at least {min} characters",
@@ -62,7 +67,8 @@
         "passwordMinLength": "Password must be at least {min} characters",
         "confirmPasswordRequired": "Please confirm your password",
         "passwordsMismatch": "Passwords do not match",
-        "registrationFailed": "Registration failed. Please try again."
+        "registrationFailed": "Registration failed. Please try again.",
+        "googleFailed": "Google sign-up failed. Please try again."
       }
     }
   },

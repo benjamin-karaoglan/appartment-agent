@@ -3,10 +3,19 @@
 import uuid as uuid_lib
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+# Register ba_user table in SQLAlchemy metadata (managed by Better Auth via Next.js).
+# This allows the ForeignKey on users.ba_user_id to resolve without a full ORM model.
+Table(
+    "ba_user",
+    Base.metadata,
+    Column("id", String(36), primary_key=True),
+    extend_existing=True,
+)
 
 
 class User(Base):
@@ -27,6 +36,11 @@ class User(Base):
     redesigns_generated_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Better Auth integration - links to ba_user table
+    ba_user_id = Column(
+        String(36), ForeignKey("ba_user.id", ondelete="SET NULL"), unique=True, nullable=True
+    )
 
     # Relationships
     properties = relationship("Property", back_populates="user", cascade="all, delete-orphan")
