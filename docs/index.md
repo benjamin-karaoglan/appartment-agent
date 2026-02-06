@@ -141,8 +141,9 @@ flowchart LR
 
 | Layer | Technologies |
 |-------|--------------|
-| **Frontend** | Next.js 14, React 18, TypeScript, Tailwind CSS, pnpm |
+| **Frontend** | Next.js 14, React 18, TypeScript, Tailwind CSS, Better Auth, next-intl, pnpm |
 | **Backend** | FastAPI, Python 3.10+, SQLAlchemy, UV |
+| **Auth** | Better Auth (email/password + Google OAuth), HTTP-only session cookies |
 | **AI/ML** | Google Gemini 2.0, Vertex AI, LangChain |
 | **Database** | PostgreSQL 15, Redis 7 |
 | **Storage** | MinIO (local), Google Cloud Storage (production) |

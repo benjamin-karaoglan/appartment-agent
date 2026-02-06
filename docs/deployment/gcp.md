@@ -233,7 +233,7 @@ flowchart TD
 
     subgraph Secrets["Secrets"]
         SM_DB["Secret: database-url"]
-        SM_JWT["Secret: jwt-secret"]
+        SM_AUTH["Secret: better-auth-secret"]
         SM_API["Secret: google-cloud-api-key"]
         SM_LOG["Secret: logfire-token"]
     end
@@ -468,7 +468,7 @@ Environment variables are set via Terraform and Secret Manager:
 |----------|--------|-------------|
 | `ENVIRONMENT` | Terraform | `production` |
 | `DATABASE_URL` | Secret Manager | PostgreSQL connection string |
-| `SECRET_KEY` | Secret Manager | JWT signing key |
+| `SECRET_KEY` | Secret Manager | Application secret key |
 | `GOOGLE_CLOUD_PROJECT` | Terraform | GCP project ID |
 | `GOOGLE_CLOUD_LOCATION` | Terraform | GCP region |
 | `GEMINI_USE_VERTEXAI` | Terraform | `true` (uses Vertex AI) |
@@ -483,7 +483,12 @@ Environment variables are set via Terraform and Secret Manager:
 | Variable | Source | Description |
 |----------|--------|-------------|
 | `NEXT_PUBLIC_API_URL` | Terraform | Backend URL (custom domain or Cloud Run URL) |
+| `NEXT_PUBLIC_APP_URL` | Terraform | Frontend URL (custom domain or Cloud Run URL) |
+| `DATABASE_URL` | Secret Manager | PostgreSQL connection string (for Better Auth) |
+| `BETTER_AUTH_SECRET` | Secret Manager | Session signing secret (min 32 chars) |
 | `NODE_ENV` | Terraform | `production` |
+| `GOOGLE_CLIENT_ID` | Secret Manager | Google OAuth client ID (optional) |
+| `GOOGLE_CLIENT_SECRET` | Secret Manager | Google OAuth client secret (optional) |
 
 ### Setting Secrets Manually
 
@@ -493,8 +498,11 @@ If you need to set secrets manually:
 # Database URL (automatically set by Terraform)
 echo -n "postgresql://..." | gcloud secrets versions add database-url --data-file=-
 
-# JWT Secret (automatically set by Terraform)
+# Application Secret (automatically set by Terraform)
 echo -n "your-secret-key" | gcloud secrets versions add jwt-secret --data-file=-
+
+# Better Auth Secret (for frontend session signing)
+echo -n "your-better-auth-secret" | gcloud secrets versions add better-auth-secret --data-file=-
 
 # Google Cloud API Key (optional, for non-Vertex AI usage)
 echo -n "your-api-key" | gcloud secrets versions add google-cloud-api-key --data-file=-
@@ -741,7 +749,7 @@ flowchart TB
 
     subgraph App["Application Security"]
         CORS["CORS Restrictions"]
-        JWT["JWT Authentication"]
+        Auth["Better Auth Sessions"]
         Validation["Input Validation"]
     end
 
@@ -754,8 +762,8 @@ flowchart TB
     Users --> LB
     LB --> SSL
     SSL --> CORS
-    CORS --> JWT
-    JWT --> Validation
+    CORS --> Auth
+    Auth --> Validation
     Validation --> Secrets
     Validation --> PrivateIP
 ```

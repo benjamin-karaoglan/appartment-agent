@@ -946,6 +946,12 @@ resource "google_cloud_run_v2_service" "frontend" {
   template {
     service_account = google_service_account.frontend.email
 
+    # VPC access for Cloud SQL private IP connectivity
+    vpc_access {
+      connector = google_vpc_access_connector.connector.id
+      egress    = "PRIVATE_RANGES_ONLY"
+    }
+
     # Cloud SQL connection for Better Auth database access
     volumes {
       name = "cloudsql"
@@ -1049,12 +1055,10 @@ resource "google_cloud_run_v2_service" "frontend" {
         }
       }
 
-      dynamic "env" {
-        for_each = local.google_oauth_enabled ? [1] : []
-        content {
-          name  = "NEXT_PUBLIC_GOOGLE_AUTH_ENABLED"
-          value = "true"
-        }
+      # Mount Cloud SQL socket
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
       }
     }
   }

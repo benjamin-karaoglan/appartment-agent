@@ -83,35 +83,57 @@ pnpm start
 
 ```text
 src/
-├── app/                    # Next.js App Router pages
-│   ├── dashboard/          # Main dashboard
-│   ├── properties/         # Property management
-│   │   └── [id]/
-│   │       ├── documents/  # Document upload & analysis
-│   │       └── photos/     # Photo redesign studio
-│   ├── login/              # Authentication
-│   └── register/
-├── components/             # Reusable components
-│   ├── Header.tsx          # Navigation header
-│   ├── ProtectedRoute.tsx  # Auth guard
+├── app/
+│   ├── [locale]/               # Locale-scoped pages (FR/EN)
+│   │   ├── page.tsx            # Home page
+│   │   ├── dashboard/          # Main dashboard
+│   │   ├── properties/         # Property management
+│   │   │   ├── new/            # Create property
+│   │   │   └── [id]/
+│   │   │       ├── documents/  # Document upload & analysis
+│   │   │       └── photos/     # Photo redesign studio
+│   │   └── auth/
+│   │       ├── login/          # Login page
+│   │       └── register/       # Registration page
+│   ├── api/auth/[...all]/      # Better Auth API route handler
+│   ├── layout.tsx              # Root layout
+│   └── globals.css             # Global styles
+├── components/                 # Reusable components
+│   ├── Header.tsx              # Navigation header + locale switcher
+│   ├── ProtectedRoute.tsx      # Auth guard
 │   └── MarketTrendChart.tsx
-├── contexts/               # React contexts
-│   └── AuthContext.tsx     # Authentication state
-├── lib/                    # Utilities
-│   └── api.ts              # Axios instance & interceptors
-└── types/                  # TypeScript definitions
+├── contexts/
+│   └── AuthContext.tsx          # Auth state (Better Auth sessions)
+├── i18n/                        # Internationalization
+│   ├── config.ts               # Locale definitions
+│   ├── navigation.ts           # Locale-aware Link, useRouter
+│   └── routing.ts              # Locale routing config
+├── lib/
+│   ├── api.ts                  # Axios instance & interceptors
+│   ├── auth.ts                 # Better Auth server configuration
+│   └── auth-client.ts          # Better Auth client (signIn, signUp, etc.)
+├── middleware.ts                # next-intl locale middleware
+└── types/
     └── index.ts
+messages/                        # Translation files (at frontend root)
+├── en.json
+└── fr.json
 ```
 
 ## Key Pages
 
+All pages are under the `[locale]` segment (e.g., `/fr/dashboard`, `/en/dashboard`).
+
 | Route | Description |
 |-------|-------------|
-| `/dashboard` | Overview with stats and property list |
-| `/properties/new` | Create new property |
-| `/properties/[id]` | Property details |
-| `/properties/[id]/documents` | Document management with AI analysis |
-| `/properties/[id]/photos` | Photo redesign studio |
+| `/[locale]/` | Home page |
+| `/[locale]/dashboard` | Overview with stats and property list |
+| `/[locale]/properties/new` | Create new property |
+| `/[locale]/properties/[id]` | Property details with price analysis |
+| `/[locale]/properties/[id]/documents` | Document management with AI analysis |
+| `/[locale]/properties/[id]/photos` | Photo redesign studio |
+| `/[locale]/auth/login` | Login (email/password + Google OAuth) |
+| `/[locale]/auth/register` | Registration |
 
 ## Authentication
 

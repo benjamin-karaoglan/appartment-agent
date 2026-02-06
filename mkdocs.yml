@@ -66,12 +66,14 @@ nav:
     - backend/index.md
     - API Reference: backend/api-reference.md
     - AI Services: backend/ai-services.md
+    - Prompt Templates: backend/prompt-templates.md
     - Database & Models: backend/database.md
     - DVF Data: backend/dvf-data.md
   - Frontend:
     - frontend/index.md
     - Pages & Routes: frontend/pages.md
     - Components: frontend/components.md
+    - Internationalization: frontend/internationalization.md
   - Deployment:
     - deployment/index.md
     - Docker: deployment/docker.md

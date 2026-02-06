@@ -73,12 +73,18 @@ flowchart LR
     subgraph NextJS["Next.js 14 App"]
         subgraph AppRouter["App Router"]
             Layout["Root Layout"]
+            Locale["[locale] Layout"]
             Pages["Page Components"]
         end
 
-        subgraph State["State Management"]
+        subgraph Auth["Authentication"]
+            BetterAuth["Better Auth<br/>(API Routes)"]
             AuthContext["Auth Context"]
+        end
+
+        subgraph State["State Management"]
             ReactQuery["React Query Cache"]
+            i18n["next-intl<br/>FR / EN"]
         end
 
         subgraph UI["UI Layer"]
@@ -87,22 +93,28 @@ flowchart LR
         end
     end
 
-    Layout --> Pages
+    Layout --> Locale --> Pages
+    Pages --> Auth
     Pages --> State
     Pages --> UI
 ```
 
 | Directory | Purpose |
 |-----------|---------|
-| `src/app/` | App Router pages and layouts |
+| `src/app/[locale]/` | Locale-scoped App Router pages |
+| `src/app/api/auth/` | Better Auth API route handler |
 | `src/components/` | Reusable React components |
 | `src/contexts/` | React context providers (Auth) |
-| `src/lib/` | Utilities and API client |
+| `src/i18n/` | Internationalization config and routing |
+| `src/lib/` | Utilities, API client, and auth config |
 | `src/types/` | TypeScript type definitions |
+| `messages/` | Translation files (en.json, fr.json) |
 
 **Key Technologies**:
 
 - **React 18** with Server Components
+- **Better Auth** for authentication (email/password + Google OAuth)
+- **next-intl** for internationalization (FR/EN)
 - **Tailwind CSS** for styling
 - **React Query** for data fetching and caching
 - **TypeScript** for type safety
@@ -189,7 +201,10 @@ Stores structured data:
 
 | Table | Records | Purpose |
 |-------|---------|---------|
-| `users` | ~100s | User accounts and authentication |
+| `users` | ~100s | User accounts and profile data |
+| `ba_user` | ~100s | Better Auth user accounts |
+| `ba_session` | ~100s | Better Auth active sessions |
+| `ba_account` | ~100s | Better Auth OAuth provider links |
 | `properties` | ~100s | Properties and their metadata |
 | `documents` | ~1000s | Documents and analysis results |
 | `dvf_records` | 5.4M+ | French property transactions (2022-2025) |
@@ -238,30 +253,45 @@ graph TD
 
 ## Security Architecture
 
-### Authentication Flow
+### Authentication Flow (Better Auth)
+
+Authentication is handled by [Better Auth](https://www.better-auth.com/) on the frontend via Next.js API routes. The backend validates sessions by checking cookies against the `ba_session` database table.
 
 ```mermaid
 sequenceDiagram
     participant User as User Browser
-    participant Frontend as Frontend
-    participant Backend as Backend API
+    participant FE as Frontend (Next.js)
+    participant Auth as API Route (/api/auth/*)
     participant DB as PostgreSQL
+    participant BE as Backend (FastAPI)
 
-    User->>Frontend: 1. Enter credentials
-    Frontend->>Backend: 2. POST /auth/login
-    Backend->>DB: 3. Verify password (bcrypt)
-    DB-->>Backend: 4. User record
-    Backend->>Backend: 5. Generate JWT (HS256)
-    Backend-->>Frontend: 6. Return access token
-    Frontend->>Frontend: 7. Store in localStorage
-    Frontend-->>User: 8. Redirect to dashboard
+    rect rgb(230, 245, 255)
+        Note over User,DB: Registration / Login
+        User->>FE: 1. Enter credentials (or click Google OAuth)
+        FE->>Auth: 2. POST /api/auth/sign-in
+        Auth->>DB: 3. Verify credentials (bcrypt)
+        Auth->>DB: 4. Create session in ba_session table
+        Auth-->>FE: 5. Set HTTP-only cookie (better-auth.session_token)
+        FE-->>User: 6. Redirect to dashboard
+    end
 
-    Note over Frontend,Backend: Subsequent requests
-    User->>Frontend: 9. Access protected page
-    Frontend->>Backend: 10. Request with Bearer token
-    Backend->>Backend: 11. Validate JWT
-    Backend-->>Frontend: 12. Return data
+    rect rgb(230, 255, 230)
+        Note over User,BE: Authenticated API Requests
+        User->>FE: 7. Access protected page
+        FE->>BE: 8. Request with session cookie
+        BE->>DB: 9. Validate cookie against ba_session
+        BE->>DB: 10. Check session expiry + user active
+        BE-->>FE: 11. Return protected data
+        FE-->>User: 12. Display content
+    end
 ```
+
+**Key differences from legacy JWT:**
+
+- No tokens stored in localStorage — HTTP-only cookies only
+- Session state lives in PostgreSQL (`ba_session` table), not in the token
+- Google OAuth supported as an optional provider
+- Backend validates by querying the database, not by verifying a JWT signature
 
 ### Security Layers
 
@@ -273,7 +303,7 @@ flowchart TB
     end
 
     subgraph App["Application Security"]
-        Auth["JWT Authentication"]
+        Auth["Better Auth Sessions<br/>(HTTP-only cookies)"]
         Validation["Input Validation<br/>Pydantic"]
         SQLi["SQL Injection Prevention<br/>SQLAlchemy"]
     end
@@ -299,7 +329,7 @@ flowchart TB
 | Transport | HTTPS with TLS 1.3 |
 | Origin | CORS restricted to allowed origins |
 | Rate Limiting | Redis-based request throttling |
-| Authentication | JWT tokens (7-day expiry) |
+| Authentication | Better Auth session cookies (7-day expiry) |
 | Authorization | Role-based access control |
 | Input | Pydantic schema validation |
 | Database | SQLAlchemy parameterized queries |

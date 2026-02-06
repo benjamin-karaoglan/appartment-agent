@@ -26,7 +26,6 @@ cd appart-agent
 ```bash
 # Copy example environment files
 cp .env.example .env
-cp backend/.env.example backend/.env
 cp frontend/.env.local.example frontend/.env.local
 ```
 
@@ -36,6 +35,19 @@ Edit `.env` and add your API key:
 GOOGLE_CLOUD_API_KEY=your_api_key_here
 SECRET_KEY=your-secret-key-at-least-32-characters-long
 ```
+
+Edit `frontend/.env.local` and set the Better Auth secret:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+DATABASE_URL=postgresql://appart:appart@db:5432/appart_agent
+BETTER_AUTH_SECRET=$(openssl rand -hex 32)  # Generate a random secret
+```
+
+!!! tip "Google OAuth (optional)"
+    To enable "Sign in with Google", add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+    to `frontend/.env.local`. See [Configuration](configuration.md#better-auth-setup) for setup steps.
 
 ### 3. Start Services
 

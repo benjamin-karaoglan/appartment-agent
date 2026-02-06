@@ -231,60 +231,64 @@ flowchart LR
     Original --> Classic["Classic<br/>Traditional, rich colors"]
 ```
 
-## Authentication Flow
+## Authentication Flow (Better Auth)
+
+Authentication is handled by [Better Auth](https://www.better-auth.com/) on the frontend via Next.js API routes. The backend validates sessions by checking the `better-auth.session_token` cookie against the `ba_session` database table.
 
 ```mermaid
 sequenceDiagram
     participant User as User Browser
     participant FE as Frontend (Next.js)
+    participant Auth as API Route (/api/auth/*)
+    participant DB as PostgreSQL (ba_* tables)
     participant BE as Backend (FastAPI)
-    participant DB as PostgreSQL
 
     rect rgb(230, 245, 255)
-        Note over User,DB: Registration
+        Note over User,DB: Registration (Email/Password)
         User->>FE: 1. Fill registration form
-        FE->>BE: 2. POST /auth/register
-        BE->>BE: 3. Hash password (bcrypt)
-        BE->>DB: 4. Create user record
-        BE-->>FE: 5. Return success
-        FE-->>User: 6. Redirect to login
+        FE->>Auth: 2. POST /api/auth/sign-up/email
+        Auth->>Auth: 3. Hash password (bcrypt)
+        Auth->>DB: 4. Create ba_user + ba_account records
+        Auth->>DB: 5. Create ba_session record
+        Auth-->>FE: 6. Set HTTP-only cookie
+        FE-->>User: 7. Redirect to dashboard
     end
 
     rect rgb(255, 245, 230)
-        Note over User,DB: Login
-        User->>FE: 7. Enter credentials
-        FE->>BE: 8. POST /auth/login
-        BE->>DB: 9. Fetch user by email
-        BE->>BE: 10. Verify password
-        BE->>BE: 11. Generate JWT (HS256)
-        BE-->>FE: 12. Return access token
-        FE->>FE: 13. Store in localStorage
-        FE-->>User: 14. Redirect to dashboard
+        Note over User,DB: Login (Email/Password or Google OAuth)
+        User->>FE: 8. Enter credentials or click "Sign in with Google"
+        FE->>Auth: 9. POST /api/auth/sign-in/email (or OAuth redirect)
+        Auth->>DB: 10. Verify credentials
+        Auth->>DB: 11. Create or update ba_session
+        Auth-->>FE: 12. Set HTTP-only cookie (better-auth.session_token)
+        FE-->>User: 13. Redirect to dashboard
     end
 
     rect rgb(230, 255, 230)
-        Note over User,BE: Authenticated Requests
-        User->>FE: 15. Access protected page
-        FE->>BE: 16. GET /api/... + Bearer token
-        BE->>BE: 17. Validate JWT signature
-        BE->>BE: 18. Check token expiry
-        BE-->>FE: 19. Return protected data
-        FE-->>User: 20. Display content
+        Note over User,BE: Authenticated API Requests
+        User->>FE: 14. Access protected page
+        FE->>BE: 15. GET /api/... (cookie sent automatically)
+        BE->>DB: 16. Query ba_session WHERE token = cookie
+        BE->>BE: 17. Check session expiry + user active
+        BE-->>FE: 18. Return protected data
+        FE-->>User: 19. Display content
     end
 ```
 
-### JWT Token Structure
+### Session Cookie Structure
 
 ```mermaid
 flowchart LR
-    subgraph Token["JWT Token"]
-        Header["Header<br/>{alg: HS256, typ: JWT}"]
-        Payload["Payload<br/>{sub: user_id, exp: timestamp}"]
-        Signature["Signature<br/>HMAC(header.payload, SECRET_KEY)"]
+    subgraph Cookie["better-auth.session_token"]
+        Token["Session Token<br/>(random string)"]
+        Dot["."]
+        Signature["Signature<br/>(HMAC verification)"]
     end
 
-    Header --> Payload --> Signature
+    Token --> Dot --> Signature
 ```
+
+The backend extracts only the token part (before the `.`) and looks it up in the `ba_session` table. Sessions expire after 7 days.
 
 ## DVF Data Import Flow
 

@@ -27,8 +27,10 @@ backend/
 │   ├── core/                # Core configuration
 │   │   ├── config.py        # Settings management
 │   │   ├── database.py      # Database connection
+│   │   ├── better_auth_security.py  # Better Auth session validation
+│   │   ├── i18n.py          # Internationalization (FR/EN)
 │   │   ├── logging.py       # Logging setup
-│   │   └── security.py      # Auth utilities
+│   │   └── security.py      # Legacy JWT auth
 │   ├── models/              # SQLAlchemy models
 │   │   ├── analysis.py      # Analysis results
 │   │   ├── document.py      # Documents
@@ -64,6 +66,7 @@ backend/
 |-------|-------------|
 | [API Reference](api-reference.md) | All REST endpoints and schemas |
 | [AI Services](ai-services.md) | Gemini integration and document analysis |
+| [Prompt Templates](prompt-templates.md) | Versioned AI prompt management |
 | [Database & Models](database.md) | Data models and migrations |
 | [DVF Data](dvf-data.md) | French property data import and queries |
 

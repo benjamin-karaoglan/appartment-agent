@@ -10,6 +10,8 @@ The AppArt Agent frontend is a Next.js 14 application using the App Router.
 | React 18 | UI library with Server Components |
 | TypeScript | Type safety |
 | Tailwind CSS | Styling |
+| Better Auth | Authentication (email/password + Google OAuth) |
+| next-intl | Internationalization (FR/EN) |
 | React Query | Data fetching and caching |
 | pnpm | Package management |
 
@@ -17,34 +19,42 @@ The AppArt Agent frontend is a Next.js 14 application using the App Router.
 
 ```text
 frontend/
+├── messages/                    # Translation files
+│   ├── en.json
+│   └── fr.json
 ├── src/
-│   ├── app/                    # App Router pages
-│   │   ├── auth/               # Authentication pages
-│   │   │   ├── login/
-│   │   │   └── register/
-│   │   ├── dashboard/          # Main dashboard
-│   │   ├── properties/         # Property management
-│   │   │   ├── [id]/           # Property detail
-│   │   │   │   ├── documents/  # Document management
-│   │   │   │   ├── photos/     # Photo management
-│   │   │   │   └── redesign-studio/
-│   │   │   └── new/            # Create property
-│   │   ├── globals.css         # Global styles
-│   │   ├── layout.tsx          # Root layout
-│   │   └── page.tsx            # Landing page
-│   ├── components/             # Shared components
-│   │   ├── Header.tsx
-│   │   ├── InfoTooltip.tsx
-│   │   ├── MarketTrendChart.tsx
-│   │   ├── ProtectedRoute.tsx
-│   │   └── Providers.tsx
-│   ├── contexts/               # React contexts
-│   │   └── AuthContext.tsx
-│   ├── lib/                    # Utilities
-│   │   └── api.ts              # API client
-│   └── types/                  # TypeScript types
+│   ├── app/
+│   │   ├── [locale]/            # Locale-scoped pages (FR/EN)
+│   │   │   ├── page.tsx         # Home page
+│   │   │   ├── dashboard/       # Main dashboard
+│   │   │   ├── properties/      # Property management
+│   │   │   │   ├── [id]/
+│   │   │   │   │   ├── documents/
+│   │   │   │   │   └── photos/
+│   │   │   │   └── new/
+│   │   │   └── auth/
+│   │   │       ├── login/
+│   │   │       └── register/
+│   │   ├── api/auth/[...all]/   # Better Auth API route
+│   │   ├── globals.css          # Global styles
+│   │   └── layout.tsx           # Root layout
+│   ├── components/              # Shared components
+│   │   ├── Header.tsx           # Navigation + locale switcher
+│   │   ├── ProtectedRoute.tsx   # Auth guard
+│   │   └── MarketTrendChart.tsx
+│   ├── contexts/
+│   │   └── AuthContext.tsx       # Auth state (Better Auth)
+│   ├── i18n/                    # Internationalization
+│   │   ├── config.ts
+│   │   ├── navigation.ts
+│   │   └── routing.ts
+│   ├── lib/
+│   │   ├── api.ts               # Axios API client
+│   │   ├── auth.ts              # Better Auth server config
+│   │   └── auth-client.ts       # Better Auth client
+│   ├── middleware.ts            # next-intl locale middleware
+│   └── types/
 │       └── index.ts
-├── public/                     # Static assets
 ├── tailwind.config.js
 ├── next.config.js
 └── package.json
@@ -56,6 +66,7 @@ frontend/
 |-------|-------------|
 | [Pages & Routes](pages.md) | Application pages and routing |
 | [Components](components.md) | Reusable UI components |
+| [Internationalization](internationalization.md) | FR/EN translations and locale routing |
 
 ## Quick Commands
 
@@ -124,10 +135,13 @@ function PropertyList() {
 
 ### Environment Variables
 
-Create `frontend/.env.local`:
+Create `frontend/.env.local` (see `.env.local.example`):
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+DATABASE_URL=postgresql://appart:appart@localhost:5432/appart_agent
+BETTER_AUTH_SECRET=your-secret-at-least-32-chars
 ```
 
 ### Hot Reload

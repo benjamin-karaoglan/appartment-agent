@@ -1,28 +1,28 @@
 # Pages & Routes
 
-AppArt Agent uses Next.js 14 App Router for file-based routing.
+AppArt Agent uses Next.js 14 App Router for file-based routing. All pages are under the `[locale]` dynamic segment (`/fr/...` or `/en/...`) for internationalization.
 
 ## Route Structure
 
 ```text
-/                           # Landing page
+/[locale]                         # Landing page (/fr, /en)
 ├── /auth
-│   ├── /login              # Login form
-│   └── /register           # Registration form
-├── /dashboard              # Main dashboard (protected)
+│   ├── /login                    # Login form
+│   └── /register                 # Registration form
+├── /dashboard                    # Main dashboard (protected)
 └── /properties
-    ├── /new                # Create property (protected)
-    └── /[id]               # Property detail (protected)
-        ├── /documents      # Document management
-        ├── /photos         # Photo management
-        └── /redesign-studio # Photo redesign
+    ├── /new                      # Create property (protected)
+    └── /[id]                     # Property detail (protected)
+        ├── /documents            # Document management
+        ├── /photos               # Photo management
+        └── /redesign-studio      # Photo redesign
 ```
 
 ## Pages
 
-### Landing Page (`/`)
+### Landing Page (`/[locale]`)
 
-**File**: `src/app/page.tsx`
+**File**: `src/app/[locale]/page.tsx`
 
 Public landing page with:
 
@@ -32,25 +32,26 @@ Public landing page with:
 
 ### Authentication
 
-#### Login (`/auth/login`)
+#### Login (`/[locale]/auth/login`)
 
-**File**: `src/app/auth/login/page.tsx`
+**File**: `src/app/[locale]/auth/login/page.tsx`
 
-- Email/password form
-- JWT token storage
+- Email/password form (via Better Auth)
+- Optional Google OAuth sign-in
+- Session cookie set on success
 - Redirect to dashboard on success
 
-#### Register (`/auth/register`)
+#### Register (`/[locale]/auth/register`)
 
-**File**: `src/app/auth/register/page.tsx`
+**File**: `src/app/[locale]/auth/register/page.tsx`
 
-- Registration form
+- Registration form (via Better Auth)
 - Email validation
 - Auto-login after registration
 
-### Dashboard (`/dashboard`)
+### Dashboard (`/[locale]/dashboard`)
 
-**File**: `src/app/dashboard/page.tsx`
+**File**: `src/app/[locale]/dashboard/page.tsx`
 
 Protected route showing:
 
@@ -61,9 +62,9 @@ Protected route showing:
 
 ### Properties
 
-#### New Property (`/properties/new`)
+#### New Property (`/[locale]/properties/new`)
 
-**File**: `src/app/properties/new/page.tsx`
+**File**: `src/app/[locale]/properties/new/page.tsx`
 
 Property creation form:
 
@@ -71,9 +72,9 @@ Property creation form:
 - Price and surface area
 - Property type selection
 
-#### Property Detail (`/properties/[id]`)
+#### Property Detail (`/[locale]/properties/[id]`)
 
-**File**: `src/app/properties/[id]/page.tsx`
+**File**: `src/app/[locale]/properties/[id]/page.tsx`
 
 Property overview with:
 
@@ -95,9 +96,9 @@ export default function PropertyPage({
 }
 ```
 
-#### Documents (`/properties/[id]/documents`)
+#### Documents (`/[locale]/properties/[id]/documents`)
 
-**File**: `src/app/properties/[id]/documents/page.tsx`
+**File**: `src/app/[locale]/properties/[id]/documents/page.tsx`
 
 Document management:
 
@@ -120,9 +121,9 @@ const handleUpload = async (files: FileList) => {
 };
 ```
 
-#### Photos (`/properties/[id]/photos`)
+#### Photos (`/[locale]/properties/[id]/photos`)
 
-**File**: `src/app/properties/[id]/photos/page.tsx`
+**File**: `src/app/[locale]/properties/[id]/photos/page.tsx`
 
 Photo management:
 
@@ -131,9 +132,9 @@ Photo management:
 - Room type tagging
 - Link to redesign studio
 
-#### Redesign Studio (`/properties/[id]/redesign-studio`)
+#### Redesign Studio (`/[locale]/properties/[id]/redesign-studio`)
 
-**File**: `src/app/properties/[id]/redesign-studio/page.tsx`
+**File**: `src/app/[locale]/properties/[id]/redesign-studio/page.tsx`
 
 AI-powered photo redesign:
 
@@ -157,7 +158,7 @@ const requestRedesign = async (photoId: number, style: string) => {
 
 ## Protected Routes
 
-Routes under `/dashboard` and `/properties` require authentication.
+Routes under `/[locale]/dashboard` and `/[locale]/properties` require authentication.
 
 ### ProtectedRoute Component
 
@@ -194,7 +195,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 ### Usage in Layout
 
 ```tsx
-// src/app/dashboard/layout.tsx
+// src/app/[locale]/dashboard/layout.tsx
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 export default function DashboardLayout({
@@ -215,10 +216,12 @@ export default function DashboardLayout({
 
 ## Route Navigation
 
+Use locale-aware navigation from `@/i18n/navigation` instead of standard Next.js imports. This automatically includes the current locale in URLs.
+
 ### Link Component
 
 ```tsx
-import Link from 'next/link';
+import { Link } from '@/i18n/navigation';
 
 <Link
   href={`/properties/${property.id}`}
@@ -226,20 +229,21 @@ import Link from 'next/link';
 >
   View Property
 </Link>
+// Renders: /fr/properties/123 or /en/properties/123
 ```
 
 ### Programmatic Navigation
 
 ```tsx
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/i18n/navigation';
 
 const router = useRouter();
 
-// Navigate
+// Navigate (locale is automatically included)
 router.push('/dashboard');
 
-// Replace (no history entry)
-router.replace('/auth/login');
+// Switch locale without losing current path
+router.replace(pathname, { locale: 'en' });
 
 // Back
 router.back();
@@ -250,7 +254,7 @@ router.back();
 Each route can have a `loading.tsx` file:
 
 ```tsx
-// src/app/properties/[id]/loading.tsx
+// src/app/[locale]/properties/[id]/loading.tsx
 export default function Loading() {
   return (
     <div className="animate-pulse">
@@ -266,7 +270,7 @@ export default function Loading() {
 Each route can have an `error.tsx` file:
 
 ```tsx
-// src/app/properties/[id]/error.tsx
+// src/app/[locale]/properties/[id]/error.tsx
 "use client";
 
 export default function Error({
@@ -298,7 +302,7 @@ export default function Error({
 Dynamic metadata for SEO:
 
 ```tsx
-// src/app/properties/[id]/page.tsx
+// src/app/[locale]/properties/[id]/page.tsx
 import { Metadata } from 'next';
 
 export async function generateMetadata({

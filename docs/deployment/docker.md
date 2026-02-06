@@ -64,7 +64,7 @@ services:
 
 ### Environment Variables
 
-Create `.env` in project root:
+Create `.env` in project root (backend):
 
 ```bash
 # Required
@@ -75,6 +75,20 @@ SECRET_KEY=your-secret-key-32-chars-minimum
 GOOGLE_CLOUD_PROJECT=your-project
 GEMINI_USE_VERTEXAI=false
 AUTO_IMPORT_DVF=false
+```
+
+Create `frontend/.env.local` (frontend):
+
+```bash
+# Required
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+DATABASE_URL=postgresql://appart:appart@localhost:5432/appart_agent
+BETTER_AUTH_SECRET=your-secret-at-least-32-chars
+
+# Optional — Google OAuth
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
 ```
 
 ## Building Images

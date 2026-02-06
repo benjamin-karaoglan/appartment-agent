@@ -100,8 +100,48 @@ MAX_UPLOAD_SIZE=10485760                      # 10MB in bytes
 # API endpoint
 NEXT_PUBLIC_API_URL=http://localhost:8000
 
-# Optional: Analytics, feature flags, etc.
+# App URL (required for Better Auth callbacks)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Database (Better Auth needs direct DB access for session management)
+DATABASE_URL=postgresql://appart:appart@localhost:5432/appart_agent
+
+# Better Auth secret (generate with: openssl rand -hex 32)
+BETTER_AUTH_SECRET=your-better-auth-secret-at-least-32-characters
+
+# Google OAuth (optional - leave empty to disable)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 ```
+
+### Better Auth Setup
+
+Authentication is handled by [Better Auth](https://www.better-auth.com/) via Next.js API routes. The backend validates sessions by checking the `better-auth.session_token` cookie against the `ba_session` database table.
+
+**Required variables:**
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_APP_URL` | Yes | Frontend URL (for OAuth callbacks) |
+| `DATABASE_URL` | Yes | PostgreSQL connection (Better Auth session storage) |
+| `BETTER_AUTH_SECRET` | Yes | Secret for signing session cookies (32+ chars) |
+| `GOOGLE_CLIENT_ID` | No | Google OAuth client ID (enables Google sign-in) |
+| `GOOGLE_CLIENT_SECRET` | No | Google OAuth client secret |
+
+**Generate a secret:**
+
+```bash
+openssl rand -hex 32
+```
+
+**Google OAuth setup (optional):**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create an OAuth 2.0 Client ID (Web application)
+3. Add redirect URIs:
+   - Local: `http://localhost:3000/api/auth/callback/google`
+   - Production: `https://your-frontend-url/api/auth/callback/google`
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
 
 ## Configuration by Environment
 
@@ -217,10 +257,12 @@ print(f'AI Model: {settings.GEMINI_LLM_MODEL}')
 
 ## Configuration Reference
 
+### Backend
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | Yes | - | PostgreSQL connection string |
-| `SECRET_KEY` | Yes | - | JWT signing key (32+ chars) |
+| `SECRET_KEY` | Yes | - | Legacy auth signing key (32+ chars) |
 | `GOOGLE_CLOUD_API_KEY` | Yes* | - | Gemini API key |
 | `STORAGE_BACKEND` | No | `minio` | Storage: `minio` or `gcs` |
 | `GEMINI_LLM_MODEL` | No | `gemini-2.0-flash-lite` | Text analysis model |
@@ -229,3 +271,14 @@ print(f'AI Model: {settings.GEMINI_LLM_MODEL}')
 | `CACHE_TTL` | No | `3600` | Cache TTL in seconds |
 
 *Required unless using Vertex AI with service account
+
+### Frontend
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `NEXT_PUBLIC_API_URL` | Yes | - | Backend API URL |
+| `NEXT_PUBLIC_APP_URL` | Yes | - | Frontend URL (for auth callbacks) |
+| `DATABASE_URL` | Yes | - | PostgreSQL connection (Better Auth) |
+| `BETTER_AUTH_SECRET` | Yes | - | Session cookie signing secret (32+ chars) |
+| `GOOGLE_CLIENT_ID` | No | - | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | No | - | Google OAuth client secret |

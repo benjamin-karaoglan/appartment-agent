@@ -249,7 +249,8 @@ flowchart LR
 |--------|---------|--------|
 | `database-url` | PostgreSQL connection string | Terraform (auto) |
 | `db-password` | Database password | Terraform (auto) |
-| `jwt-secret` | JWT signing key | Terraform (auto) |
+| `jwt-secret` | Application secret key | Terraform (auto) |
+| `better-auth-secret` | Better Auth session signing key | Manual or Terraform |
 | `google-cloud-api-key` | Gemini API key | Manual (optional) |
 | `logfire-token` | Logfire write token | Terraform or Manual |
 

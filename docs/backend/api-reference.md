@@ -7,12 +7,16 @@
 
 ## Authentication
 
-Most endpoints require JWT authentication:
+Authentication is handled by [Better Auth](https://www.better-auth.com/). The frontend manages sign-in/sign-up via `/api/auth/[...all]` API routes, which set an HTTP-only session cookie (`better-auth.session_token`).
+
+Backend endpoints validate requests by reading this session cookie:
 
 ```bash
 curl -X GET http://localhost:8000/api/properties \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+  -H "Cookie: better-auth.session_token=SESSION_TOKEN"
 ```
+
+The backend also supports legacy JWT Bearer tokens during migration (via `get_current_user_hybrid`).
 
 ## Endpoints
 
@@ -47,6 +51,10 @@ POST /api/users/register
 
 #### Login
 
+Authentication is handled client-side via the Better Auth SDK. The frontend calls `authClient.signIn.email()` which hits the Next.js `/api/auth/sign-in/email` route, setting a session cookie on success.
+
+For the legacy endpoint (kept for backward compatibility):
+
 ```http
 POST /api/users/login
 ```
@@ -60,14 +68,7 @@ POST /api/users/login
 }
 ```
 
-**Response** `200 OK`:
-
-```json
-{
-  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
-  "token_type": "bearer"
-}
-```
+**Response** `200 OK`: Sets `better-auth.session_token` cookie.
 
 ---
 
