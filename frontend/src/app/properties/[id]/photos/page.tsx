@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
-import { ArrowLeft, Upload, Sparkles, Image as ImageIcon, Download, Trash2 } from 'lucide-react';
+import { ArrowLeft, Upload, Sparkles, Image as ImageIcon, Download, Trash2, X, Columns, Maximize2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import api from '@/lib/api';
@@ -57,6 +57,8 @@ function PhotosContent() {
   const [savingRoomType, setSavingRoomType] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedRedesign, setSelectedRedesign] = useState<Redesign | null>(null);
+  const [showOriginalFullscreen, setShowOriginalFullscreen] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
 
   // Load style presets
   useEffect(() => {
@@ -405,7 +407,8 @@ function PhotosContent() {
                     <img
                       src={selectedPhoto.presigned_url}
                       alt={selectedPhoto.filename}
-                      className="w-full rounded-lg"
+                      className="w-full rounded-lg cursor-pointer"
+                      onClick={() => setShowOriginalFullscreen(true)}
                     />
                   </div>
 
@@ -574,26 +577,86 @@ function PhotosContent() {
         </div>
       )}
 
-      {selectedRedesign && (
+      {selectedRedesign && selectedPhoto && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4"
-          onClick={() => setSelectedRedesign(null)}
+          onClick={() => { setSelectedRedesign(null); setShowComparison(false); }}
         >
           <div
-            className="relative max-h-[90vh] w-full max-w-5xl"
+            className={`relative max-h-[90vh] w-full overflow-auto ${showComparison ? 'max-w-6xl' : 'max-w-5xl'}`}
             onClick={(event) => event.stopPropagation()}
           >
-            <img
-              src={selectedRedesign.presigned_url}
-              alt={`Redesign ${selectedRedesign.id}`}
-              className="h-full w-full rounded-lg object-contain"
-            />
+            <div className="absolute right-2 top-2 z-10 flex items-center gap-2">
+              <button
+                onClick={() => setShowComparison(!showComparison)}
+                className="rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80"
+                title={showComparison ? 'Fullscreen redesign' : 'Compare with original'}
+              >
+                {showComparison ? <Maximize2 className="h-5 w-5" /> : <Columns className="h-5 w-5" />}
+              </button>
+              <button
+                onClick={() => { setSelectedRedesign(null); setShowComparison(false); }}
+                className="rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {showComparison ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="mb-2 text-center text-sm font-semibold text-white/80">Original</p>
+                  <img
+                    src={selectedPhoto.presigned_url}
+                    alt={selectedPhoto.filename}
+                    className="w-full rounded-lg object-contain max-h-[60vh]"
+                  />
+                </div>
+                <div>
+                  <p className="mb-2 text-center text-sm font-semibold text-white/80">Redesign</p>
+                  <img
+                    src={selectedRedesign.presigned_url}
+                    alt={`Redesign ${selectedRedesign.id}`}
+                    className="w-full rounded-lg object-contain max-h-[60vh]"
+                  />
+                </div>
+              </div>
+            ) : (
+              <img
+                src={selectedRedesign.presigned_url}
+                alt={`Redesign ${selectedRedesign.id}`}
+                className="h-full w-full rounded-lg object-contain"
+              />
+            )}
             <div className="mt-4 max-h-40 overflow-auto rounded-lg bg-white/95 p-4 text-sm text-gray-700">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Prompt
               </p>
               <p className="mt-2 whitespace-pre-line">{selectedRedesign.prompt}</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showOriginalFullscreen && selectedPhoto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4"
+          onClick={() => setShowOriginalFullscreen(false)}
+        >
+          <div
+            className="relative max-h-[90vh] w-full max-w-5xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowOriginalFullscreen(false)}
+              className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <img
+              src={selectedPhoto.presigned_url}
+              alt={selectedPhoto.filename}
+              className="h-full w-full rounded-lg object-contain"
+            />
           </div>
         </div>
       )}
