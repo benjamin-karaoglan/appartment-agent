@@ -47,6 +47,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ============================================================================
 FROM python:3.10-slim AS dev
 
+# Install UV for development (needed to sync dependencies when volume is mounted)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y \
     postgresql-client \
