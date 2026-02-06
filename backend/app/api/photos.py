@@ -202,12 +202,6 @@ async def create_redesign(
     try:
         start_time = time.time()
 
-        # Get original image from storage
-        original_image_data = get_storage_service().get_file(
-            minio_key=photo.storage_key,
-            bucket_name=photo.storage_bucket
-        )
-
         # Build prompt
         gemini_service = get_gemini_service()
 
@@ -223,6 +217,7 @@ async def create_redesign(
         # Handle multi-turn if parent redesign specified
         conversation_history = None
         is_multi_turn = False
+        input_image_data = None
 
         if request.parent_redesign_id:
             parent = db.query(PhotoRedesign).filter(
@@ -233,12 +228,28 @@ async def create_redesign(
             if parent:
                 conversation_history = parent.conversation_history or []
                 is_multi_turn = True
+                # Use the parent redesign's generated image as input
+                try:
+                    input_image_data = get_storage_service().get_file(
+                        minio_key=parent.storage_key,
+                        bucket_name=parent.storage_bucket
+                    )
+                    logger.info(f"Using parent redesign {parent.id} image as input for iteration")
+                except Exception as e:
+                    logger.warning(f"Failed to fetch parent redesign image, falling back to original: {e}")
+
+        # Fall back to original photo if no parent image available
+        if input_image_data is None:
+            input_image_data = get_storage_service().get_file(
+                minio_key=photo.storage_key,
+                bucket_name=photo.storage_bucket
+            )
 
         # Generate redesign
         logger.info(f"Generating redesign for photo {photo_id} with prompt: {prompt[:100]}...")
 
         result = await gemini_service.redesign_apartment(
-            image_data=original_image_data,
+            image_data=input_image_data,
             prompt=prompt,
             aspect_ratio=request.aspect_ratio,
             conversation_history=conversation_history
@@ -551,6 +562,8 @@ async def update_photo(
 
     if update.room_type is not None:
         photo.room_type = update.room_type
+    if update.filename is not None:
+        photo.filename = update.filename
 
     db.commit()
     db.refresh(photo)

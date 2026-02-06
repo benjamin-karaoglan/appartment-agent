@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
-import { ArrowLeft, Upload, Sparkles, Image as ImageIcon, Download, Trash2, X, Columns, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Upload, Sparkles, Image as ImageIcon, Download, Trash2, X, Columns, Maximize2, Send, Plus, MessageSquare, Clock, Pencil, Check, LayoutGrid } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import api from '@/lib/api';
@@ -29,6 +29,14 @@ interface Redesign {
   generation_time_ms?: number;
   presigned_url: string;
   is_favorite: boolean;
+  parent_redesign_id?: number | null;
+  is_multi_turn: boolean;
+}
+
+interface Thread {
+  id: number;
+  messages: Redesign[];
+  latestTimestamp: string;
 }
 
 interface StylePreset {
@@ -59,6 +67,32 @@ function PhotosContent() {
   const [selectedRedesign, setSelectedRedesign] = useState<Redesign | null>(null);
   const [showOriginalFullscreen, setShowOriginalFullscreen] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  const [activeThreadId, setActiveThreadId] = useState<number | null>(null);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [optimisticPrompt, setOptimisticPrompt] = useState<string | null>(null);
+  const [threadNames, setThreadNames] = useState<Record<number, string>>({});
+  const [editingThreadId, setEditingThreadId] = useState<number | null>(null);
+  const [editingThreadName, setEditingThreadName] = useState('');
+  const [editingPhotoName, setEditingPhotoName] = useState(false);
+  const [photoNameDraft, setPhotoNameDraft] = useState('');
+  const [showGallery, setShowGallery] = useState(false);
+  const [expandedBubbles, setExpandedBubbles] = useState<Set<number>>(new Set());
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load thread names from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('threadNames');
+      if (stored) setThreadNames(JSON.parse(stored));
+    } catch { /* ignore */ }
+  }, []);
+
+  const saveThreadName = (threadId: number, name: string) => {
+    const updated = { ...threadNames, [threadId]: name };
+    setThreadNames(updated);
+    try { localStorage.setItem('threadNames', JSON.stringify(updated)); } catch { /* ignore */ }
+  };
 
   // Load style presets
   useEffect(() => {
@@ -70,10 +104,15 @@ function PhotosContent() {
     loadPhotos();
   }, [propertyId]);
 
-  // Load redesigns when photo is selected
+  // Load redesigns when photo is selected + reset thread state
   useEffect(() => {
     if (selectedPhoto) {
       loadRedesigns(selectedPhoto.id);
+      setActiveThreadId(null);
+      setShowGallery(false);
+      setOptimisticPrompt(null);
+      setSelectedPreset('');
+      setCustomPrompt('');
     }
   }, [selectedPhoto]);
 
@@ -83,6 +122,108 @@ function PhotosContent() {
     if (!preset?.prompt_template) return;
     setCustomPrompt(preset.prompt_template.replace(/\{room_type\}/g, roomType));
   }, [selectedPreset, roomType, stylePresets]);
+
+  // Build threads from redesigns
+  const buildThreads = (redesignsList: Redesign[]): Thread[] => {
+    const byId = new Map<number, Redesign>();
+    for (const r of redesignsList) byId.set(r.id, r);
+
+    // Map parent_id → children
+    const childrenOf = new Map<number, Redesign[]>();
+    const roots: Redesign[] = [];
+    for (const r of redesignsList) {
+      if (!r.parent_redesign_id) {
+        roots.push(r);
+      } else {
+        const siblings = childrenOf.get(r.parent_redesign_id) || [];
+        siblings.push(r);
+        childrenOf.set(r.parent_redesign_id, siblings);
+      }
+    }
+
+    // Walk chain from a starting node to build one thread's messages
+    const walkChain = (start: Redesign, childIdx: number): Redesign[] => {
+      const chain: Redesign[] = [start];
+      let current = start;
+      while (true) {
+        const kids = childrenOf.get(current.id);
+        if (!kids || kids.length === 0) break;
+        // If branching, each child after the first becomes a separate thread (handled by caller)
+        const next = kids[childIdx !== undefined && current.id === start.id ? childIdx : 0];
+        if (!next) break;
+        chain.push(next);
+        current = next;
+        childIdx = 0; // after first step, always take first child
+      }
+      return chain;
+    };
+
+    const result: Thread[] = [];
+
+    for (const root of roots) {
+      const kids = childrenOf.get(root.id);
+      if (!kids || kids.length <= 1) {
+        // No branching: single thread from this root
+        const msgs = walkChain(root, 0);
+        result.push({
+          id: root.id,
+          messages: msgs,
+          latestTimestamp: msgs[msgs.length - 1].created_at,
+        });
+      } else {
+        // Branching: fork into separate threads
+        // First thread includes root + first child's chain
+        for (let i = 0; i < kids.length; i++) {
+          const msgs = [root, ...walkChain(kids[i], 0)];
+          result.push({
+            id: i === 0 ? root.id : kids[i].id,
+            messages: msgs,
+            latestTimestamp: msgs[msgs.length - 1].created_at,
+          });
+        }
+      }
+    }
+
+    // Sort by most recent activity (newest first)
+    result.sort((a, b) => new Date(b.latestTimestamp).getTime() - new Date(a.latestTimestamp).getTime());
+    return result;
+  };
+
+  useEffect(() => {
+    setThreads(buildThreads(redesigns));
+  }, [redesigns]);
+
+  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [threads, optimisticPrompt, activeThreadId]);
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+  }, [customPrompt]);
+
+  const handlePhotoRename = async (newName: string) => {
+    if (!selectedPhoto || !newName.trim()) return;
+    try {
+      const response = await api.patch(`/api/photos/${selectedPhoto.id}`, {
+        filename: newName.trim(),
+      });
+      const updatedPhoto = response.data as Photo;
+      setSelectedPhoto(updatedPhoto);
+      setPhotos((prev) =>
+        prev.map((p) => (p.id === updatedPhoto.id ? updatedPhoto : p))
+      );
+    } catch (error: any) {
+      console.error('Error renaming photo:', error);
+      alert(error.response?.data?.detail || 'Failed to rename photo');
+    } finally {
+      setEditingPhotoName(false);
+    }
+  };
 
   const loadStylePresets = async () => {
     try {
@@ -186,25 +327,47 @@ function PhotosContent() {
       return;
     }
 
+    const activeThread = threads.find((t) => t.id === activeThreadId);
+    const isFollowUp = activeThread && activeThread.messages.length > 0;
+    const parentId = isFollowUp ? activeThread.messages[activeThread.messages.length - 1].id : undefined;
+
+    // Set optimistic prompt for immediate visual feedback
+    setOptimisticPrompt(customPrompt || selectedPreset);
+
     try {
       setGenerating(true);
-      const response = await api.post(`/api/photos/${selectedPhoto.id}/redesign`, {
-        style_preset: selectedPreset || undefined,
+
+      const body: Record<string, unknown> = {
         custom_prompt: customPrompt || undefined,
         room_type: selectedPhoto.room_type || roomType,
-        aspect_ratio: '16:9'
-      });
+        aspect_ratio: '16:9',
+      };
+
+      if (isFollowUp) {
+        body.parent_redesign_id = parentId;
+      } else {
+        body.style_preset = selectedPreset || undefined;
+      }
+
+      const response = await api.post(`/api/photos/${selectedPhoto.id}/redesign`, body);
 
       const newRedesign = response.data;
       setRedesigns([newRedesign, ...redesigns]);
 
+      // For new threads, set active thread to the new redesign's id
+      if (!isFollowUp) {
+        setActiveThreadId(newRedesign.id);
+      }
+
       // Clear inputs
       setSelectedPreset('');
       setCustomPrompt('');
+      setOptimisticPrompt(null);
       setToastMessage('Redesign generated');
       setTimeout(() => setToastMessage(null), 3000);
     } catch (error: any) {
       console.error('Error generating redesign:', error);
+      setOptimisticPrompt(null);
       alert(error.response?.data?.detail || 'Failed to generate redesign');
     } finally {
       setGenerating(false);
@@ -370,7 +533,7 @@ function PhotosContent() {
               </div>
             </div>
 
-            {/* Right Column: Redesign Studio */}
+            {/* Right Column: Conversation Studio */}
             <div className="lg:col-span-2">
               {!selectedPhoto ? (
                 <div className="bg-white shadow rounded-lg p-12 text-center">
@@ -378,170 +541,448 @@ function PhotosContent() {
                   <p className="text-gray-500">Upload or select a photo to get started</p>
                 </div>
               ) : (
-                <>
-                  {/* Original Photo */}
-                  <div className="bg-white shadow rounded-lg p-6 mb-6">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Original Photo
-                      </h3>
-                      <div className="flex items-center gap-3">
-                        <label className="text-sm font-medium text-gray-700">
-                          Room Type
-                        </label>
-                        <select
-                          value={roomType}
-                          onChange={(e) => handleRoomTypeChange(e.target.value)}
-                          disabled={savingRoomType}
-                          className="w-44 px-3 py-2 border border-gray-300 rounded-md text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
-                        >
-                          <option value="living room">Living Room</option>
-                          <option value="bedroom">Bedroom</option>
-                          <option value="kitchen">Kitchen</option>
-                          <option value="bathroom">Bathroom</option>
-                          <option value="dining room">Dining Room</option>
-                          <option value="home office">Home Office</option>
-                        </select>
-                      </div>
-                    </div>
+                <div className="bg-white shadow rounded-lg flex flex-col" style={{ height: 'calc(100vh - 280px)', minHeight: '600px' }}>
+                  {/* 7a: Original Photo Header */}
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200">
                     <img
                       src={selectedPhoto.presigned_url}
                       alt={selectedPhoto.filename}
-                      className="w-full rounded-lg cursor-pointer"
+                      className="h-10 w-14 rounded object-cover cursor-pointer flex-shrink-0"
                       onClick={() => setShowOriginalFullscreen(true)}
                     />
-                  </div>
-
-                  {/* Redesign Controls */}
-                  <div className="bg-white shadow rounded-lg p-6 mb-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                      <Sparkles className="h-5 w-5 mr-2 text-purple-600" />
-                      Generate Redesign
-                    </h3>
-
-                    {/* Style Presets */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Choose a Design Style
-                      </label>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {stylePresets.map((preset) => (
-                          <button
-                            key={preset.id}
-                            onClick={() => {
-                              setSelectedPreset(preset.id);
-                              if (preset.prompt_template) {
-                                setCustomPrompt(
-                                  preset.prompt_template.replace(/\{room_type\}/g, roomType)
-                                );
-                              } else {
-                                setCustomPrompt('');
-                              }
-                            }}
-                            className={`p-4 border-2 rounded-lg text-left transition-all ${
-                              selectedPreset === preset.id
-                                ? 'border-purple-600 bg-purple-50'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            <p className="font-semibold text-gray-900 mb-1">{preset.name}</p>
-                            <p className="text-xs text-gray-600">{preset.description}</p>
+                    <div className="min-w-0 flex-1">
+                      {editingPhotoName ? (
+                        <form
+                          className="flex items-center gap-1"
+                          onSubmit={(e) => { e.preventDefault(); handlePhotoRename(photoNameDraft); }}
+                        >
+                          <input
+                            autoFocus
+                            value={photoNameDraft}
+                            onChange={(e) => setPhotoNameDraft(e.target.value)}
+                            onBlur={() => handlePhotoRename(photoNameDraft)}
+                            onKeyDown={(e) => { if (e.key === 'Escape') setEditingPhotoName(false); }}
+                            className="text-sm font-medium text-gray-900 border border-gray-300 rounded px-1.5 py-0.5 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                          <button type="submit" className="text-green-600 hover:text-green-700 flex-shrink-0">
+                            <Check className="h-3.5 w-3.5" />
                           </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Custom Prompt */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Or Enter Custom Prompt
-                      </label>
-                      <textarea
-                        value={customPrompt}
-                        onChange={(e) => {
-                          setCustomPrompt(e.target.value);
-                          if (e.target.value) setSelectedPreset('');
-                        }}
-                        placeholder="Describe your desired redesign in detail..."
-                        rows={6}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Tip: Describe the scene, don&apos;t just list keywords
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={handleGenerateRedesign}
-                      disabled={generating || (!selectedPreset && !customPrompt)}
-                      className="w-full px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
-                    >
-                      {generating ? (
-                        <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                          Generating... (this may take 10-30s)
-                        </>
+                        </form>
                       ) : (
-                        <>
-                          <Sparkles className="h-5 w-5" />
-                          Generate Redesign
-                        </>
+                        <button
+                          onClick={() => { setEditingPhotoName(true); setPhotoNameDraft(selectedPhoto.filename); }}
+                          className="flex items-center gap-1.5 group text-left w-full"
+                          title="Click to rename"
+                        >
+                          <p className="text-sm font-medium text-gray-900 truncate">{selectedPhoto.filename}</p>
+                          <Pencil className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                        </button>
                       )}
-                    </button>
+                    </div>
+                    <select
+                      value={roomType}
+                      onChange={(e) => handleRoomTypeChange(e.target.value)}
+                      disabled={savingRoomType}
+                      className="w-36 px-2 py-1.5 text-sm border border-gray-300 rounded-md text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
+                    >
+                      <option value="living room">Living Room</option>
+                      <option value="bedroom">Bedroom</option>
+                      <option value="kitchen">Kitchen</option>
+                      <option value="bathroom">Bathroom</option>
+                      <option value="dining room">Dining Room</option>
+                      <option value="home office">Home Office</option>
+                    </select>
                   </div>
 
-                  {/* Redesign Gallery */}
-                  <div className="bg-white shadow rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                      Redesigns ({redesigns.length})
-                    </h3>
+                  {/* 7b: Thread Tabs */}
+                  <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 overflow-x-auto">
+                    <button
+                      onClick={() => {
+                        setActiveThreadId(null);
+                        setShowGallery(false);
+                        setSelectedPreset('');
+                        setCustomPrompt('');
+                      }}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                        activeThreadId === null && !showGallery
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Plus className="h-3 w-3" />
+                      New
+                    </button>
+                    {threads.map((thread, idx) => {
+                      const defaultLabel = thread.messages[0]?.style_preset?.replace(/_/g, ' ') || `Thread ${threads.length - idx}`;
+                      const displayName = threadNames[thread.id] || defaultLabel;
 
-                    {redesigns.length === 0 ? (
-                      <p className="text-gray-500 text-center py-8">
-                        No redesigns yet. Generate your first one above!
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {redesigns.map((redesign) => (
-                      <div
-                        key={redesign.id}
-                        className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
-                      >
-                        <img
-                          src={redesign.presigned_url}
-                          alt={`Redesign ${redesign.id}`}
-                          className="w-full h-64 object-cover cursor-pointer"
-                          onClick={() => setSelectedRedesign(redesign)}
-                        />
-                            <div className="p-4 bg-gray-50">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
-                                  {redesign.style_preset?.replace(/_/g, ' ').toUpperCase() || 'CUSTOM'}
-                                </span>
-                                {redesign.generation_time_ms && (
-                                  <span className="text-xs text-gray-500">
-                                    {(redesign.generation_time_ms / 1000).toFixed(1)}s
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-sm text-gray-600 line-clamp-2 mb-2">
-                                {redesign.prompt.substring(0, 100)}...
-                              </p>
-                              <a
-                                href={redesign.presigned_url}
-                                download
-                                className="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-700"
-                              >
-                                <Download className="h-4 w-4 mr-1" />
-                                Download
-                              </a>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      if (editingThreadId === thread.id) {
+                        return (
+                          <form
+                            key={thread.id}
+                            className="flex items-center gap-1"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              saveThreadName(thread.id, editingThreadName || defaultLabel);
+                              setEditingThreadId(null);
+                            }}
+                          >
+                            <input
+                              autoFocus
+                              value={editingThreadName}
+                              onChange={(e) => setEditingThreadName(e.target.value)}
+                              onBlur={() => {
+                                saveThreadName(thread.id, editingThreadName || defaultLabel);
+                                setEditingThreadId(null);
+                              }}
+                              onKeyDown={(e) => { if (e.key === 'Escape') setEditingThreadId(null); }}
+                              className="text-xs font-medium border border-purple-300 rounded-full px-2.5 py-1 w-32 focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
+                            />
+                            <button type="submit" className="text-green-600 hover:text-green-700 flex-shrink-0">
+                              <Check className="h-3 w-3" />
+                            </button>
+                          </form>
+                        );
+                      }
+
+                      return (
+                        <button
+                          key={thread.id}
+                          onClick={() => {
+                            setActiveThreadId(thread.id);
+                            setShowGallery(false);
+                            setSelectedPreset('');
+                            setCustomPrompt('');
+                          }}
+                          onDoubleClick={(e) => {
+                            e.preventDefault();
+                            setEditingThreadId(thread.id);
+                            setEditingThreadName(displayName);
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                            activeThreadId === thread.id && !showGallery
+                              ? 'bg-purple-100 text-purple-700 ring-1 ring-purple-300'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                          title="Double-click to rename"
+                        >
+                          <MessageSquare className="h-3 w-3" />
+                          {displayName}
+                          <span className="text-[10px] opacity-70">({thread.messages.length})</span>
+                        </button>
+                      );
+                    })}
+
+                    {/* Divider + All Redesigns gallery tab */}
+                    {redesigns.length > 0 && (
+                      <>
+                        <div className="h-5 w-px bg-gray-300 flex-shrink-0" />
+                        <button
+                          onClick={() => setShowGallery(true)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                            showGallery
+                              ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          <LayoutGrid className="h-3 w-3" />
+                          All
+                          <span className="text-[10px] opacity-70">({redesigns.length})</span>
+                        </button>
+                      </>
                     )}
                   </div>
-                </>
+
+                  {showGallery ? (
+                    /* Gallery Grid — browse-only view, no input area */
+                    <div className="flex-1 overflow-y-auto p-4">
+                      {redesigns.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                          <ImageIcon className="h-12 w-12 text-gray-300 mb-4" />
+                          <h3 className="text-lg font-semibold text-gray-700 mb-1">No redesigns yet</h3>
+                          <p className="text-sm text-gray-500 max-w-sm">
+                            Start a conversation to generate your first redesign.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          {redesigns.map((redesign) => {
+                            const parentThread = threads.find((t) =>
+                              t.messages.some((m) => m.id === redesign.id)
+                            );
+                            const threadLabel = parentThread
+                              ? threadNames[parentThread.id] || parentThread.messages[0]?.style_preset?.replace(/_/g, ' ') || `Thread`
+                              : 'Unknown';
+
+                            const timeAgo = (() => {
+                              const diff = Date.now() - new Date(redesign.created_at).getTime();
+                              const mins = Math.floor(diff / 60000);
+                              if (mins < 1) return 'just now';
+                              if (mins < 60) return `${mins}m ago`;
+                              const hrs = Math.floor(mins / 60);
+                              if (hrs < 24) return `${hrs}h ago`;
+                              const days = Math.floor(hrs / 24);
+                              return `${days}d ago`;
+                            })();
+
+                            return (
+                              <div key={redesign.id} className="group">
+                                {/* Image with hover overlay */}
+                                <div
+                                  className="relative aspect-video rounded-lg overflow-hidden cursor-pointer"
+                                  onClick={() => setSelectedRedesign(redesign)}
+                                >
+                                  <img
+                                    src={redesign.presigned_url}
+                                    alt={`Redesign ${redesign.id}`}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  {/* Hover overlay */}
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-start justify-between p-2 opacity-0 group-hover:opacity-100">
+                                    <span className="px-1.5 py-0.5 bg-black/60 text-[10px] font-semibold text-white rounded uppercase">
+                                      {redesign.style_preset?.replace(/_/g, ' ') || 'Custom'}
+                                    </span>
+                                    <a
+                                      href={redesign.presigned_url}
+                                      download
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="p-1 bg-black/60 rounded text-white hover:bg-black/80 transition-colors"
+                                      title="Download"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                    </a>
+                                  </div>
+                                </div>
+                                {/* Metadata row */}
+                                <div className="flex items-center gap-2 mt-1.5 px-0.5">
+                                  <button
+                                    onClick={() => {
+                                      if (parentThread) {
+                                        setShowGallery(false);
+                                        setActiveThreadId(parentThread.id);
+                                      }
+                                    }}
+                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium truncate"
+                                  >
+                                    {threadLabel}
+                                  </button>
+                                  <span className="text-[10px] text-gray-400 flex-shrink-0">{timeAgo}</span>
+                                  {redesign.generation_time_ms && (
+                                    <span className="text-[10px] text-gray-400 flex-shrink-0">
+                                      {(redesign.generation_time_ms / 1000).toFixed(1)}s
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      {/* 7c: Conversation Timeline */}
+                      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                        {(() => {
+                          const activeThread = threads.find((t) => t.id === activeThreadId);
+                          if (!activeThread || activeThread.messages.length === 0) {
+                            // Welcome / empty state
+                            return (
+                              <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                                <Sparkles className="h-12 w-12 text-purple-300 mb-4" />
+                                <h3 className="text-lg font-semibold text-gray-700 mb-1">Start a new redesign conversation</h3>
+                                <p className="text-sm text-gray-500 max-w-sm">
+                                  Choose a style preset or write a custom prompt below to generate your first redesign.
+                                </p>
+                              </div>
+                            );
+                          }
+
+                          return activeThread.messages.map((redesign) => {
+                            const isLong = redesign.prompt.length > 300;
+                            const isExpanded = expandedBubbles.has(redesign.id);
+                            return (
+                            <div key={redesign.id} className="space-y-3">
+                              {/* User bubble */}
+                              <div className="flex justify-end">
+                                <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-purple-600 text-white px-4 py-3">
+                                  <p className="text-sm whitespace-pre-wrap">
+                                    {isLong && !isExpanded ? redesign.prompt.substring(0, 300) + '...' : redesign.prompt}
+                                  </p>
+                                  {isLong && (
+                                    <button
+                                      onClick={() => {
+                                        setExpandedBubbles((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(redesign.id)) next.delete(redesign.id);
+                                          else next.add(redesign.id);
+                                          return next;
+                                        });
+                                      }}
+                                      className="text-[11px] text-white/70 hover:text-white underline mt-1"
+                                    >
+                                      {isExpanded ? 'Show less' : 'Show more'}
+                                    </button>
+                                  )}
+                                  <div className="flex items-center gap-2 mt-2">
+                                    {redesign.style_preset && (
+                                      <span className="px-1.5 py-0.5 bg-white/20 text-[10px] font-semibold rounded uppercase">
+                                        {redesign.style_preset.replace(/_/g, ' ')}
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] opacity-70 flex items-center gap-1">
+                                      <Clock className="h-2.5 w-2.5" />
+                                      {new Date(redesign.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    {redesign.generation_time_ms && (
+                                      <span className="text-[10px] opacity-70">
+                                        {(redesign.generation_time_ms / 1000).toFixed(1)}s
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              {/* AI bubble */}
+                              <div className="flex justify-start">
+                                <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-gray-100 p-2">
+                                  <img
+                                    src={redesign.presigned_url}
+                                    alt={`Redesign ${redesign.id}`}
+                                    className="w-full rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
+                                    onClick={() => setSelectedRedesign(redesign)}
+                                  />
+                                  <div className="flex items-center justify-between mt-2 px-1">
+                                    <span className="text-[10px] text-gray-500">
+                                      Click to view fullscreen
+                                    </span>
+                                    <a
+                                      href={redesign.presigned_url}
+                                      download
+                                      className="inline-flex items-center text-xs text-indigo-600 hover:text-indigo-700"
+                                    >
+                                      <Download className="h-3 w-3 mr-1" />
+                                      Download
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                          });
+                        })()}
+
+                        {/* Optimistic user bubble + typing indicator while generating */}
+                        {generating && optimisticPrompt && (
+                          <div className="space-y-3">
+                            <div className="flex justify-end">
+                              <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-purple-600 text-white px-4 py-3">
+                                <p className="text-sm whitespace-pre-wrap">
+                                  {optimisticPrompt.length > 300 ? optimisticPrompt.substring(0, 300) + '...' : optimisticPrompt}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex justify-start">
+                              <div className="rounded-2xl rounded-tl-sm bg-gray-100 px-4 py-3">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                                  <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                                  <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div ref={chatEndRef} />
+                      </div>
+
+                      {/* 7d: Input Area */}
+                      <div className="border-t border-gray-200 px-4 py-3">
+                        {(() => {
+                          const activeThread = threads.find((t) => t.id === activeThreadId);
+                          const isFollowUp = activeThread && activeThread.messages.length > 0;
+
+                          return (
+                            <>
+                              {/* Style presets for first message only */}
+                              {!isFollowUp && (
+                                <div className="mb-3">
+                                  <div className="flex gap-2 overflow-x-auto pb-2">
+                                    {stylePresets.map((preset) => (
+                                      <button
+                                        key={preset.id}
+                                        onClick={() => {
+                                          setSelectedPreset(preset.id);
+                                          if (preset.prompt_template) {
+                                            setCustomPrompt(
+                                              preset.prompt_template.replace(/\{room_type\}/g, roomType)
+                                            );
+                                          } else {
+                                            setCustomPrompt('');
+                                          }
+                                        }}
+                                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                          selectedPreset === preset.id
+                                            ? 'bg-purple-600 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                        title={preset.description}
+                                      >
+                                        {preset.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex gap-2 items-end">
+                                <textarea
+                                  ref={textareaRef}
+                                  value={customPrompt}
+                                  onChange={(e) => {
+                                    setCustomPrompt(e.target.value);
+                                    if (e.target.value && !isFollowUp) setSelectedPreset('');
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      if (!generating && (selectedPreset || customPrompt)) {
+                                        handleGenerateRedesign();
+                                      }
+                                    }
+                                  }}
+                                  placeholder={isFollowUp ? 'Describe refinements...' : 'Describe your desired redesign...'}
+                                  rows={1}
+                                  style={{ minHeight: '40px', maxHeight: '200px' }}
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-y-auto"
+                                />
+                                <button
+                                  onClick={handleGenerateRedesign}
+                                  disabled={generating || (!selectedPreset && !customPrompt)}
+                                  className="flex-shrink-0 p-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  {generating ? (
+                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                                  ) : isFollowUp ? (
+                                    <Send className="h-5 w-5" />
+                                  ) : (
+                                    <Sparkles className="h-5 w-5" />
+                                  )}
+                                </button>
+                              </div>
+
+                              <p className="text-[11px] text-gray-400 mt-1.5">
+                                {isFollowUp
+                                  ? 'Refine the previous result. The AI remembers the conversation context.'
+                                  : 'Choose a style preset or write a custom prompt. Enter to send, Shift+Enter for newline.'}
+                              </p>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
             </div>
           </div>

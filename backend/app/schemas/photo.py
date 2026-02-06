@@ -17,6 +17,7 @@ class PhotoUpload(BaseModel):
 class PhotoUpdate(BaseModel):
     """Schema for updating photo metadata."""
     room_type: Optional[str] = Field(None, description="Type of room (living_room, bedroom, kitchen, etc.)")
+    filename: Optional[str] = Field(None, description="Display name for the photo")
 
 
 class PhotoResponse(BaseModel):
