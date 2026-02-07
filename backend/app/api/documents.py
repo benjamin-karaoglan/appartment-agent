@@ -1,6 +1,7 @@
 """Documents API routes with comprehensive logging and multimodal support."""
 
 import hashlib
+import json
 import logging
 import os
 import uuid
@@ -18,12 +19,15 @@ from app.core.i18n import get_local, get_output_language, translate
 from app.models.document import Document, DocumentSummary
 from app.models.user import User
 from app.schemas.document import (
+    BulkDeleteRequest,
     DiagnosticAnalysisResponse,
+    DocumentRenameRequest,
     DocumentResponse,
     PVAGAnalysisResponse,
     TaxChargesAnalysisResponse,
 )
 from app.services.ai import get_document_analyzer
+from app.services.ai.document_processor import get_document_processor
 from app.services.documents import DocumentParser
 from app.services.storage import get_storage_service
 
@@ -45,6 +49,86 @@ def get_doc_parser():
     if _doc_parser is None:
         _doc_parser = DocumentParsingService()
     return _doc_parser
+
+
+async def _regenerate_overall_synthesis(
+    property_id: int, db: Session, output_language: str = "French"
+):
+    """
+    Regenerate the overall property synthesis from all analyzed documents.
+
+    Called after individual uploads and deletions to keep synthesis up-to-date.
+    """
+    try:
+        # Fetch all analyzed documents for this property
+        analyzed_docs = (
+            db.query(Document)
+            .filter(
+                Document.property_id == property_id,
+                Document.is_analyzed == True,
+            )
+            .all()
+        )
+
+        # Get existing synthesis record (category=NULL for overall)
+        existing_synthesis = (
+            db.query(DocumentSummary)
+            .filter(DocumentSummary.property_id == property_id, DocumentSummary.category == None)
+            .first()
+        )
+
+        # If no analyzed documents remain, delete synthesis
+        if not analyzed_docs:
+            if existing_synthesis:
+                db.delete(existing_synthesis)
+                db.commit()
+                logger.info(f"Deleted synthesis for property {property_id} (no documents)")
+            return
+
+        # Build results list from stored analysis data
+        results = []
+        for doc in analyzed_docs:
+            results.append(
+                {
+                    "filename": doc.filename,
+                    "document_type": doc.document_category,
+                    "result": {
+                        "summary": doc.analysis_summary or "",
+                        "key_insights": doc.key_insights or [],
+                        "estimated_annual_cost": doc.estimated_annual_cost or 0.0,
+                        "one_time_costs": doc.one_time_costs or [],
+                    },
+                    "document_id": doc.id,
+                }
+            )
+
+        # Call synthesize_results
+        processor = get_document_processor()
+        synthesis = await processor.synthesize_results(results, output_language=output_language)
+
+        # Save/update DocumentSummary where category=NULL
+        if not existing_synthesis:
+            existing_synthesis = DocumentSummary(property_id=property_id)
+            db.add(existing_synthesis)
+
+        existing_synthesis.overall_summary = synthesis.get("summary", "")
+        existing_synthesis.total_annual_cost = synthesis.get("total_annual_costs", 0.0)
+        existing_synthesis.total_one_time_cost = synthesis.get("total_one_time_costs", 0.0)
+        existing_synthesis.risk_level = synthesis.get("risk_level", "unknown")
+        existing_synthesis.key_findings = synthesis.get("key_findings", [])
+        existing_synthesis.recommendations = synthesis.get("recommendations", [])
+        existing_synthesis.synthesis_data = json.dumps(synthesis)
+        existing_synthesis.last_updated = datetime.utcnow()
+
+        db.commit()
+        logger.info(
+            f"Regenerated synthesis for property {property_id} from {len(analyzed_docs)} documents"
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Failed to regenerate synthesis for property {property_id}: {e}", exc_info=True
+        )
 
 
 def extract_text_from_pdf(
@@ -211,6 +295,10 @@ async def upload_document(
                 await get_doc_parser().aggregate_diagnostic_summaries(
                     property_id, db, output_language=output_language
                 )
+
+            # Regenerate overall synthesis after any upload
+            logger.info(f"Triggering overall synthesis regeneration for property {property_id}")
+            await _regenerate_overall_synthesis(property_id, db, output_language=output_language)
         except Exception as e:
             logger.error(f"Auto-parse failed for document ID {document.id}: {e}", exc_info=True)
             # Don't fail the upload if parsing fails - document is still saved
@@ -241,6 +329,109 @@ async def list_documents(
 
     documents = query.all()
     return documents
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_documents(
+    request: Request,
+    body: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """Delete multiple documents at once."""
+    locale = get_local(request)
+
+    if not body.document_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=translate("no_documents_to_delete", locale),
+        )
+
+    # Fetch all matching documents for this user
+    documents = (
+        db.query(Document)
+        .filter(Document.id.in_(body.document_ids), Document.user_id == int(current_user))
+        .all()
+    )
+
+    if not documents:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=translate("document_not_found", locale)
+        )
+
+    # Collect unique property IDs for synthesis regeneration
+    property_ids = set()
+    storage_service = get_storage_service()
+
+    for doc in documents:
+        if doc.property_id:
+            property_ids.add(doc.property_id)
+
+        # Delete from storage
+        if doc.storage_key:
+            try:
+                storage_service.delete_file(doc.storage_key, doc.storage_bucket)
+            except Exception as e:
+                logger.warning(f"Failed to delete file from storage: {e}")
+        elif doc.file_path and os.path.exists(doc.file_path):
+            os.remove(doc.file_path)
+
+        db.delete(doc)
+
+    db.commit()
+
+    # Regenerate synthesis once per property
+    output_language = get_output_language(get_local(request))
+    for pid in property_ids:
+        await _regenerate_overall_synthesis(pid, db, output_language=output_language)
+
+    return {"deleted_count": len(documents)}
+
+
+@router.patch("/{document_id}", response_model=DocumentResponse)
+async def rename_document(
+    request: Request,
+    document_id: int,
+    body: DocumentRenameRequest,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """Rename a document (display filename only, storage key unchanged)."""
+    locale = get_local(request)
+
+    new_filename = body.filename.strip()
+    if not new_filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=translate("filename_cannot_be_empty", locale),
+        )
+
+    document = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.user_id == int(current_user))
+        .first()
+    )
+
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=translate("document_not_found", locale)
+        )
+
+    # Preserve original extension
+    original_ext = os.path.splitext(document.filename)[1]
+    new_ext = os.path.splitext(new_filename)[1]
+
+    # If user provided the same extension, use as-is; otherwise append original extension
+    if new_ext.lower() == original_ext.lower():
+        document.filename = new_filename
+    else:
+        # Strip any extension from new name, then append original
+        name_without_ext = os.path.splitext(new_filename)[0]
+        document.filename = name_without_ext + original_ext
+
+    db.commit()
+    db.refresh(document)
+    return document
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
@@ -482,6 +673,9 @@ async def delete_document(
             status_code=status.HTTP_404_NOT_FOUND, detail=translate("document_not_found", locale)
         )
 
+    # Capture property_id before deletion for re-synthesis
+    property_id = document.property_id
+
     # Delete file from storage service
     if document.storage_key:
         try:
@@ -496,6 +690,13 @@ async def delete_document(
 
     db.delete(document)
     db.commit()
+
+    # Regenerate overall synthesis after deletion
+    if property_id:
+        locale = get_local(request)
+        output_language = get_output_language(locale)
+        await _regenerate_overall_synthesis(property_id, db, output_language=output_language)
+
     return None
 
 
@@ -692,6 +893,60 @@ async def regenerate_summaries(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=translate("failed_regenerate_summary", locale, error=str(e)),
         )
+
+
+@router.post("/synthesis/{property_id}/regenerate-overall")
+async def regenerate_overall_synthesis(
+    request: Request,
+    property_id: int,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """
+    Manually trigger regeneration of the overall property synthesis.
+
+    Rebuilds synthesis from all analyzed documents for the property.
+    """
+    locale = get_local(request)
+
+    from app.models.property import Property
+
+    # Verify property belongs to user
+    property = (
+        db.query(Property)
+        .filter(Property.id == property_id, Property.user_id == int(current_user))
+        .first()
+    )
+
+    if not property:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=translate("property_not_found", locale)
+        )
+
+    output_language = get_output_language(locale)
+    await _regenerate_overall_synthesis(property_id, db, output_language=output_language)
+
+    # Return the updated synthesis
+    synthesis = (
+        db.query(DocumentSummary)
+        .filter(DocumentSummary.property_id == property_id, DocumentSummary.category == None)
+        .first()
+    )
+
+    if not synthesis:
+        return None
+
+    return {
+        "id": synthesis.id,
+        "property_id": synthesis.property_id,
+        "overall_summary": synthesis.overall_summary,
+        "risk_level": synthesis.risk_level,
+        "total_annual_cost": synthesis.total_annual_cost,
+        "total_one_time_cost": synthesis.total_one_time_cost,
+        "key_findings": synthesis.key_findings,
+        "recommendations": synthesis.recommendations,
+        "last_updated": synthesis.last_updated,
+    }
 
 
 @router.post("/upload-async", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -1115,8 +1370,12 @@ async def get_bulk_processing_status(
 
     property_id = documents[0].property_id
 
-    # Get synthesis if available
-    synthesis = db.query(DocumentSummary).filter(DocumentSummary.property_id == property_id).first()
+    # Get synthesis if available (category=NULL for overall synthesis)
+    synthesis = (
+        db.query(DocumentSummary)
+        .filter(DocumentSummary.property_id == property_id, DocumentSummary.category == None)
+        .first()
+    )
 
     logger.info(f"Synthesis found for property {property_id}: {synthesis is not None}")
     if synthesis:

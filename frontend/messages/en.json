@@ -145,7 +145,14 @@
       "deleteTitle": "Delete Property",
       "deleteMessage": "Are you sure you want to delete this property? This action cannot be undone. All associated documents, analyses, and photos will be permanently deleted.",
       "deleteFailed": "Failed to delete property. Please try again.",
-      "deleteTooltip": "Delete property"
+      "deleteTooltip": "Delete property",
+      "risk": {
+        "low": "Low Risk",
+        "medium": "Medium Risk",
+        "high": "High Risk"
+      },
+      "annualCost": "Annual costs",
+      "documents": "{count, plural, one {# document} other {# documents}}"
     }
   },
   "propertyForm": {
@@ -200,6 +207,7 @@
       "analyzing": "Analyzing...",
       "manageDocuments": "Manage Documents",
       "redesignStudio": "Apartment Redesign Studio",
+      "toolsTitle": "Property Tools",
       "simpleTooltip": {
         "title": "Simple Analysis",
         "whatItDoes": "Shows only sales at the exact same address (same building).",
@@ -282,6 +290,17 @@
       "totalChange": "Total change:",
       "totalSalesAnalyzed": "Total sales analyzed:"
     },
+    "aiAnalysis": {
+      "title": "AI Property Analysis",
+      "noData": "No documents analyzed yet",
+      "viewDocuments": "Upload & analyze documents",
+      "riskLevel": "Risk Level",
+      "summary": "Summary",
+      "keyFindings": "Key Findings",
+      "recommendations": "Recommendations",
+      "annualCosts": "Annual Costs",
+      "oneTimeCosts": "One-Time Costs"
+    },
     "deleteTitle": "Delete Property",
     "deleteMessage": "Are you sure you want to delete this property? This action cannot be undone. All associated documents, analyses, and photos will be permanently deleted.",
     "analyzeFailed": "Failed to analyze price",
@@ -330,7 +349,8 @@
       "pv_ag": { "label": "PV d'AG", "description": "Assembly meeting minutes" },
       "diags": { "label": "Diagnostics", "description": "Diagnostic documents" },
       "taxe_fonciere": { "label": "Taxe Foncière", "description": "Property tax documents" },
-      "charges": { "label": "Charges", "description": "Condominium charges" }
+      "charges": { "label": "Charges", "description": "Condominium charges" },
+      "other": { "label": "Other", "description": "Other property documents" }
     },
     "documentCount": "{count, plural, one {# document} other {# documents}}",
     "uploadDocuments": "Upload Documents",
@@ -353,7 +373,24 @@
     "noDocuments": "No documents uploaded yet",
     "bulkFailed": "Bulk processing failed. Check individual document errors.",
     "processingTimeout": "Processing is taking longer than expected. Please check back later.",
-    "confirmDelete": "Are you sure you want to delete this document?"
+    "confirmDelete": "Are you sure you want to delete this document?",
+    "rename": "Rename",
+    "renameDocument": "Rename document",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "deleteSelected": "Delete selected",
+    "selectedCount": "{count, plural, one {# selected} other {# selected}}",
+    "bulkDeleteTitle": "Delete Documents",
+    "bulkDeleteMessage": "Are you sure you want to delete {count, plural, one {# document} other {# documents}}? This action cannot be undone.",
+    "documentList": {
+      "title": "Documents",
+      "expandDetails": "Show details",
+      "collapseDetails": "Hide details",
+      "resynthesize": "Regenerate Synthesis",
+      "resynthesizing": "Regenerating...",
+      "noAnalysis": "Analysis pending",
+      "emptyState": "Upload documents using the upload zone above"
+    }
   },
   "photos": {
     "backToProperty": "Back to Property",

@@ -8,7 +8,7 @@ import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { Plus, Home, FileText, TrendingUp, Trash2, Palette } from 'lucide-react';
-import type { Property } from '@/types';
+import type { Property, PropertyWithSynthesis } from '@/types';
 
 interface UserStats {
   documents_analyzed_count: number;
@@ -28,7 +28,7 @@ function DashboardContent() {
   const tc = useTranslations('common');
   const { user } = useAuth();
   const router = useRouter();
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [properties, setProperties] = useState<PropertyWithSynthesis[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletePropertyId, setDeletePropertyId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -43,10 +43,16 @@ function DashboardContent() {
 
   const loadProperties = async () => {
     try {
-      const response = await api.get('/api/properties/');
+      const response = await api.get('/api/properties/with-synthesis');
       setProperties(response.data);
     } catch (error) {
-      console.error('Failed to load properties:', error);
+      console.error('Failed to load properties with synthesis, falling back:', error);
+      try {
+        const fallbackResponse = await api.get('/api/properties/');
+        setProperties(fallbackResponse.data);
+      } catch (fallbackError) {
+        console.error('Failed to load properties:', fallbackError);
+      }
     } finally {
       setLoading(false);
     }
@@ -274,6 +280,22 @@ function DashboardContent() {
                           <span className="ml-3">{tc('rooms', { count: property.rooms })}</span>
                         )}
                       </div>
+
+                      {/* Synthesis preview - simplified counts */}
+                      {property.synthesis && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                            <span className="inline-flex items-center gap-1">
+                              <FileText className="h-4 w-4 text-gray-400" />
+                              {property.synthesis.document_count}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Palette className="h-4 w-4 text-gray-400" />
+                              {property.synthesis.redesign_count}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

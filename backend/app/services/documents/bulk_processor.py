@@ -8,6 +8,7 @@ import asyncio
 import base64
 import json
 import logging
+import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -57,7 +58,7 @@ class BulkProcessor:
     """
 
     def __init__(self):
-        self.active_tasks: Dict[str, asyncio.Task] = {}
+        self.active_tasks: Dict[str, threading.Thread] = {}
 
     async def process_bulk_upload(
         self,
@@ -195,7 +196,9 @@ class BulkProcessor:
     ) -> None:
         """Save synthesis to database."""
         summary = (
-            db.query(DocumentSummary).filter(DocumentSummary.property_id == property_id).first()
+            db.query(DocumentSummary)
+            .filter(DocumentSummary.property_id == property_id, DocumentSummary.category == None)
+            .first()
         )
 
         if not summary:
@@ -221,14 +224,24 @@ class BulkProcessor:
         document_uploads: List[Dict[str, Any]],
         output_language: str = "French",
     ) -> None:
-        """Start background processing task."""
-        task = asyncio.create_task(
-            self.process_bulk_upload(
-                workflow_id, property_id, document_uploads, output_language=output_language
-            )
-        )
-        self.active_tasks[workflow_id] = task
-        logger.info(f"Started background task: {workflow_id}")
+        """Start background processing in a dedicated thread."""
+
+        def run_in_thread():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(
+                    self.process_bulk_upload(
+                        workflow_id, property_id, document_uploads, output_language
+                    )
+                )
+            finally:
+                loop.close()
+
+        thread = threading.Thread(target=run_in_thread, daemon=True)
+        thread.start()
+        self.active_tasks[workflow_id] = thread
+        logger.info(f"Started background thread for: {workflow_id}")
 
 
 # Singleton

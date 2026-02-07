@@ -10,13 +10,17 @@ from sqlalchemy.orm import Session
 from app.core.better_auth_security import get_current_user_hybrid as get_current_user
 from app.core.database import get_db
 from app.core.i18n import get_local, translate
+from app.models.document import Document, DocumentSummary
+from app.models.photo import Photo, PhotoRedesign
 from app.models.property import DVFRecord, DVFStats, Property
 from app.schemas.property import (
     DVFGroupedTransactionResponse,
     PriceAnalysisResponse,
     PropertyCreate,
     PropertyResponse,
+    PropertySynthesisPreview,
     PropertyUpdate,
+    PropertyWithSynthesisResponse,
 )
 from app.services.dvf_service import dvf_service
 
@@ -160,6 +164,71 @@ async def search_addresses(
         )
         for r in results
     ]
+
+
+@router.get("/with-synthesis", response_model=List[PropertyWithSynthesisResponse])
+async def list_properties_with_synthesis(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 100,
+):
+    """List all properties for the current user with synthesis preview data."""
+    get_local(request)
+
+    properties = (
+        db.query(Property)
+        .filter(Property.user_id == int(current_user))
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    result = []
+    for prop in properties:
+        # Get overall synthesis (category=NULL)
+        synthesis = (
+            db.query(DocumentSummary)
+            .filter(DocumentSummary.property_id == prop.id, DocumentSummary.category == None)
+            .first()
+        )
+
+        # Get document count
+        doc_count = (
+            db.query(func.count(Document.id)).filter(Document.property_id == prop.id).scalar()
+        ) or 0
+
+        # Get redesign count
+        redesign_count = (
+            db.query(func.count(PhotoRedesign.id))
+            .join(Photo, PhotoRedesign.photo_id == Photo.id)
+            .filter(Photo.property_id == prop.id)
+            .scalar()
+        ) or 0
+
+        synthesis_preview = None
+        if synthesis:
+            key_findings: list[str] = synthesis.key_findings or []
+            synthesis_preview = PropertySynthesisPreview(
+                risk_level=synthesis.risk_level,
+                total_annual_cost=synthesis.total_annual_cost,
+                total_one_time_cost=synthesis.total_one_time_cost,
+                key_findings=key_findings,
+                document_count=doc_count,
+                redesign_count=redesign_count,
+            )
+        elif doc_count > 0 or redesign_count > 0:
+            synthesis_preview = PropertySynthesisPreview(
+                document_count=doc_count,
+                redesign_count=redesign_count,
+            )
+
+        prop_response = PropertyWithSynthesisResponse.model_validate(prop)
+        prop_response.synthesis = synthesis_preview
+        result.append(prop_response)
+
+    return result
 
 
 @router.post("/", response_model=PropertyResponse, status_code=status.HTTP_201_CREATED)

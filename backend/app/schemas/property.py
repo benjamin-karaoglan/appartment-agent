@@ -147,6 +147,26 @@ class DVFGroupedTransactionResponse(BaseModel):
         from_attributes = True
 
 
+class PropertySynthesisPreview(BaseModel):
+    """Preview of property document synthesis for dashboard cards."""
+
+    risk_level: Optional[str] = None
+    total_annual_cost: Optional[float] = None
+    total_one_time_cost: Optional[float] = None
+    key_findings: Optional[List[str]] = None
+    document_count: int = 0
+    redesign_count: int = 0
+
+
+class PropertyWithSynthesisResponse(PropertyResponse):
+    """Property response enriched with synthesis preview data."""
+
+    synthesis: Optional[PropertySynthesisPreview] = None
+
+    class Config:
+        from_attributes = True
+
+
 class PriceAnalysisResponse(BaseModel):
     """Schema for price analysis response."""
 

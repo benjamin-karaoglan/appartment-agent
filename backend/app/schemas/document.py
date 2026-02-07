@@ -6,6 +6,18 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
 
+class DocumentRenameRequest(BaseModel):
+    """Schema for renaming a document."""
+
+    filename: str
+
+
+class BulkDeleteRequest(BaseModel):
+    """Schema for bulk deleting documents."""
+
+    document_ids: List[int]
+
+
 class DocumentUpload(BaseModel):
     """Schema for document upload."""
 

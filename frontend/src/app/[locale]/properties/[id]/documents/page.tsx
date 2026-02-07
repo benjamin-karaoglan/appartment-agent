@@ -7,7 +7,6 @@ import Header from '@/components/Header';
 import { api } from '@/lib/api';
 import {
   ArrowLeft,
-  Upload,
   FileText,
   Loader2,
   Trash2,
@@ -16,7 +15,12 @@ import {
   RefreshCw,
   Sparkles,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import { useTranslations } from 'next-intl';
@@ -36,22 +40,8 @@ interface Document {
   upload_date: string;
   parsed_at?: string;
   file_size: number;
-}
-
-interface DocumentSummary {
-  id: number;
-  property_id: number;
-  category: string;
-  summary?: string;
-  key_findings?: string[];
-  total_estimated_annual_cost?: number;
-  total_one_time_costs?: number;
-  cost_breakdown?: Record<string, number>;
-  copropriete_insights?: any;
-  diagnostic_issues?: any;
-  created_at: string;
-  updated_at: string;
-  document_count: number;
+  processing_status?: string;
+  workflow_id?: string;
 }
 
 interface PropertySynthesis {
@@ -96,6 +86,20 @@ interface BulkUploadStatus {
   };
 }
 
+const CATEGORY_ORDER = ['pv_ag', 'diags', 'taxe_fonciere', 'charges', 'other'] as const;
+
+function getCategoryLabel(category: string, t: (key: string) => string): string {
+  const known = ['pv_ag', 'diags', 'taxe_fonciere', 'charges', 'other'];
+  if (known.includes(category)) {
+    return t(`categories.${category}.label`);
+  }
+  return category;
+}
+
+function getCategoryColor(_category: string): string {
+  return 'bg-blue-100 text-blue-700';
+}
+
 function DocumentsPageContent() {
   const t = useTranslations('documents');
   const tc = useTranslations('common');
@@ -103,91 +107,68 @@ function DocumentsPageContent() {
   const router = useRouter();
   const propertyId = params.id as string;
 
-  const DOCUMENT_CATEGORIES = [
-    {
-      id: 'pv_ag',
-      label: t('categories.pv_ag.label'),
-      description: t('categories.pv_ag.description'),
-      icon: FileText,
-      acceptedTypes: '.pdf',
-    },
-    {
-      id: 'diags',
-      label: t('categories.diags.label'),
-      description: t('categories.diags.description'),
-      icon: FileText,
-      acceptedTypes: '.pdf',
-    },
-    {
-      id: 'taxe_fonciere',
-      label: t('categories.taxe_fonciere.label'),
-      description: t('categories.taxe_fonciere.description'),
-      icon: FileText,
-      acceptedTypes: '.pdf',
-    },
-    {
-      id: 'charges',
-      label: t('categories.charges.label'),
-      description: t('categories.charges.description'),
-      icon: FileText,
-      acceptedTypes: '.pdf',
-    },
-  ];
-
-  const [documents, setDocuments] = useState<Record<string, Document[]>>({});
-  const [summaries, setSummaries] = useState<Record<string, DocumentSummary>>({});
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [synthesis, setSynthesis] = useState<PropertySynthesis | null>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [regenerating, setRegenerating] = useState<string | null>(null);
 
   // Smart upload states
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkStatus, setBulkStatus] = useState<BulkUploadStatus | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Document list states
+  const [expandedDoc, setExpandedDoc] = useState<number | null>(null);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [regenerating, setRegenerating] = useState(false);
+
+  // Rename states
+  const [renamingDocId, setRenamingDocId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  // Multi-select / bulk delete states
+  const [selectedDocs, setSelectedDocs] = useState<Set<number>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   useEffect(() => {
-    loadDocuments();
-    loadSummaries();
+    const init = async () => {
+      try {
+        const response = await api.get(`/api/documents?property_id=${propertyId}`);
+        setDocuments(response.data);
+
+        // Detect documents still being processed and resume polling
+        const processingDocs = (response.data as Document[]).filter(
+          (d) => d.processing_status === 'processing' || d.processing_status === 'pending'
+        );
+        if (processingDocs.length > 0) {
+          const workflowId = processingDocs.find((d) => d.workflow_id)?.workflow_id;
+          if (workflowId) {
+            setBulkUploading(true);
+            pollBulkStatus(workflowId);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load documents:', error);
+        setError('Failed to load documents');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    init();
     loadSynthesis();
   }, [propertyId]);
 
   const loadDocuments = async () => {
     try {
       const response = await api.get(`/api/documents?property_id=${propertyId}`);
-
-      // Group documents by category
-      const grouped: Record<string, Document[]> = {};
-      response.data.forEach((doc: Document) => {
-        if (!grouped[doc.document_category]) {
-          grouped[doc.document_category] = [];
-        }
-        grouped[doc.document_category].push(doc);
-      });
-
-      setDocuments(grouped);
+      setDocuments(response.data);
     } catch (error) {
       console.error('Failed to load documents:', error);
       setError('Failed to load documents');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadSummaries = async () => {
-    try {
-      const response = await api.get(`/api/documents/summaries/${propertyId}`);
-
-      // Convert array to object keyed by category
-      const summariesByCategory: Record<string, DocumentSummary> = {};
-      response.data.forEach((summary: DocumentSummary) => {
-        summariesByCategory[summary.category] = summary;
-      });
-
-      setSummaries(summariesByCategory);
-    } catch (error) {
-      console.error('Failed to load summaries:', error);
     }
   };
 
@@ -201,68 +182,95 @@ function DocumentsPageContent() {
     }
   };
 
-  const handleFileUpload = async (category: string, files: FileList | null) => {
-    if (!files || files.length === 0) return;
-
-    setUploading(category);
-    setError('');
-
-    try {
-      // Upload each file
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('property_id', propertyId);
-        formData.append('document_category', category);
-        formData.append('auto_parse', 'true');
-
-        await api.post('/api/documents/upload', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
-      }
-
-      // Reload documents and summaries
-      await loadDocuments();
-      await loadSummaries();
-      await loadSynthesis();
-    } catch (err: any) {
-      console.error('Upload error:', err);
-      setError(err.response?.data?.detail || 'Failed to upload document');
-    } finally {
-      setUploading(null);
-    }
-  };
-
-  const handleRegenerateSummary = async (category: string) => {
-    setRegenerating(category);
-    setError('');
-
-    try {
-      await api.post(`/api/documents/summaries/${propertyId}/regenerate?category=${category}`);
-      await loadSummaries();
-      await loadSynthesis();
-    } catch (err: any) {
-      console.error('Regenerate error:', err);
-      setError(err.response?.data?.detail || 'Failed to regenerate summary');
-    } finally {
-      setRegenerating(null);
-    }
-  };
-
-  const handleDeleteDocument = async (documentId: number, category: string) => {
+  const handleDeleteDocument = async (documentId: number) => {
     if (!confirm(t('confirmDelete'))) return;
 
     try {
       await api.delete(`/api/documents/${documentId}`);
       await loadDocuments();
-      await loadSummaries();
       await loadSynthesis();
     } catch (err: any) {
       console.error('Delete error:', err);
       setError(err.response?.data?.detail || 'Failed to delete document');
+    }
+  };
+
+  const handleRegenerateSynthesis = async () => {
+    setRegenerating(true);
+    setError('');
+
+    try {
+      const response = await api.post(`/api/documents/synthesis/${propertyId}/regenerate-overall`);
+      setSynthesis(response.data);
+    } catch (err: any) {
+      console.error('Regenerate error:', err);
+      setError(err.response?.data?.detail || 'Failed to regenerate synthesis');
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  // Rename handlers
+  const handleStartRename = (doc: Document) => {
+    const ext = doc.filename.substring(doc.filename.lastIndexOf('.'));
+    const nameWithoutExt = doc.filename.substring(0, doc.filename.lastIndexOf('.'));
+    setRenamingDocId(doc.id);
+    setRenameValue(nameWithoutExt);
+  };
+
+  const handleSaveRename = async (doc: Document) => {
+    if (!renameValue.trim()) return;
+    const ext = doc.filename.substring(doc.filename.lastIndexOf('.'));
+    try {
+      const response = await api.patch(`/api/documents/${doc.id}`, { filename: renameValue.trim() + ext });
+      setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, filename: response.data.filename } : d));
+      setRenamingDocId(null);
+      setRenameValue('');
+    } catch (err: any) {
+      console.error('Rename error:', err);
+      setError(err.response?.data?.detail || 'Failed to rename document');
+    }
+  };
+
+  const handleCancelRename = () => {
+    setRenamingDocId(null);
+    setRenameValue('');
+  };
+
+  // Multi-select handlers
+  const toggleDocSelection = (docId: number) => {
+    setSelectedDocs(prev => {
+      const next = new Set(prev);
+      if (next.has(docId)) {
+        next.delete(docId);
+      } else {
+        next.add(docId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedDocs.size === documents.length) {
+      setSelectedDocs(new Set());
+    } else {
+      setSelectedDocs(new Set(documents.map(d => d.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      await api.post('/api/documents/bulk-delete', { document_ids: Array.from(selectedDocs) });
+      setSelectedDocs(new Set());
+      setShowBulkDeleteConfirm(false);
+      await loadDocuments();
+      await loadSynthesis();
+    } catch (err: any) {
+      console.error('Bulk delete error:', err);
+      setError(err.response?.data?.detail || 'Failed to delete documents');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -286,8 +294,6 @@ function DocumentsPageContent() {
       });
 
       const { workflow_id } = response.data;
-
-      // Start polling for status
       pollBulkStatus(workflow_id);
     } catch (err: any) {
       console.error('Bulk upload error:', err);
@@ -297,7 +303,7 @@ function DocumentsPageContent() {
   };
 
   const pollBulkStatus = async (workflowId: string) => {
-    const maxPolls = 300; // Poll for up to 10 minutes (300 x 2s = 600s)
+    const maxPolls = 300;
     let pollCount = 0;
 
     const poll = async () => {
@@ -306,10 +312,7 @@ function DocumentsPageContent() {
         const status: BulkUploadStatus = response.data;
         setBulkStatus(status);
 
-        // Check if workflow is complete
         if (status.status === 'completed' || status.progress.percentage === 100) {
-          // Continue polling for synthesis (takes ~30s to generate)
-          // Poll every 2 seconds for up to 20 attempts (40 seconds total)
           let currentStatus = status;
           let synthesisAttempts = 0;
           const maxSynthesisAttempts = 20;
@@ -320,10 +323,7 @@ function DocumentsPageContent() {
               const synthResponse = await api.get(`/api/documents/bulk-status/${workflowId}`);
               currentStatus = synthResponse.data;
               setBulkStatus(currentStatus);
-
-              if (currentStatus.synthesis) {
-                break; // Synthesis found!
-              }
+              if (currentStatus.synthesis) break;
               synthesisAttempts++;
             } catch (err) {
               console.error('Synthesis poll error:', err);
@@ -333,22 +333,19 @@ function DocumentsPageContent() {
 
           setBulkUploading(false);
           await loadDocuments();
-          await loadSummaries();
           await loadSynthesis();
           return;
         }
 
-        // Check if workflow failed
         if (status.status === 'failed') {
           setBulkUploading(false);
           setError(t('bulkFailed'));
           return;
         }
 
-        // Continue polling if still processing
         pollCount++;
         if (pollCount < maxPolls && (status.status === 'running' || status.status === 'processing')) {
-          setTimeout(poll, 2000); // Poll every 2 seconds
+          setTimeout(poll, 2000);
         } else if (pollCount >= maxPolls) {
           setBulkUploading(false);
           setError(t('processingTimeout'));
@@ -382,7 +379,6 @@ function DocumentsPageContent() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       handleBulkUpload(files);
@@ -395,6 +391,32 @@ function DocumentsPageContent() {
       handleBulkUpload(files);
     }
   };
+
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+
+  // Group documents by category
+  const groupedDocs = documents.reduce<Record<string, Document[]>>((acc, doc) => {
+    const cat = doc.document_category || 'other';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(doc);
+    return acc;
+  }, {});
+
+  // Sort categories in defined order, with any unknown categories at the end
+  const sortedCategories = [
+    ...CATEGORY_ORDER.filter(c => groupedDocs[c]),
+    ...Object.keys(groupedDocs).filter(c => !(CATEGORY_ORDER as readonly string[]).includes(c)),
+  ];
 
   if (loading) {
     return (
@@ -423,9 +445,7 @@ function DocumentsPageContent() {
 
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              {t('subtitle')}
-            </p>
+            <p className="mt-2 text-sm text-gray-600">{t('subtitle')}</p>
           </div>
 
           {error && (
@@ -441,9 +461,7 @@ function DocumentsPageContent() {
                 <Sparkles className="h-6 w-6 text-yellow-300 mr-3" />
                 <div>
                   <h2 className="text-xl font-bold text-white">{t('smartUpload.title')}</h2>
-                  <p className="text-sm text-indigo-100">
-                    {t('smartUpload.subtitle')}
-                  </p>
+                  <p className="text-sm text-indigo-100">{t('smartUpload.subtitle')}</p>
                 </div>
               </div>
             </div>
@@ -472,9 +490,7 @@ function DocumentsPageContent() {
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">
                     {t('smartUpload.dropzone')}
                   </h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    {t('smartUpload.browse')}
-                  </p>
+                  <p className="text-sm text-gray-600 mb-4">{t('smartUpload.browse')}</p>
                   <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                     <span>{t('smartUpload.autoClassification')}</span>
@@ -486,76 +502,60 @@ function DocumentsPageContent() {
                 </div>
               )}
 
-              {bulkUploading && bulkStatus && (
+              {bulkUploading && (
                 <div className="bg-white rounded-lg p-6 border border-purple-200">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center">
                       <Loader2 className="h-6 w-6 text-purple-600 animate-spin mr-3" />
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">{t('smartUpload.processing')}</h3>
-                        <p className="text-sm text-gray-600">
-                          {t('smartUpload.processingSubtitle')}
-                        </p>
+                        <p className="text-sm text-gray-600">{t('smartUpload.processingSubtitle')}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-3xl font-bold text-purple-600">
-                        {bulkStatus.progress.percentage}%
+                    {bulkStatus && (
+                      <div className="text-right">
+                        <div className="text-3xl font-bold text-purple-600">
+                          {bulkStatus.progress.percentage}%
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {t('smartUpload.complete', { completed: bulkStatus.progress.completed, total: bulkStatus.progress.total })}
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500">
-                        {t('smartUpload.complete', { completed: bulkStatus.progress.completed, total: bulkStatus.progress.total })}
-                      </div>
-                    </div>
+                    )}
                   </div>
 
-                  {/* Progress bar */}
-                  <div className="mb-6">
-                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                      <div
-                        className="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full transition-all duration-500"
-                        style={{ width: `${bulkStatus.progress.percentage}%` }}
-                      />
+                  {bulkStatus && (
+                    <div className="mb-6">
+                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full transition-all duration-500"
+                          style={{ width: `${bulkStatus.progress.percentage}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Document list */}
                   <div className="space-y-2">
-                    {bulkStatus.documents.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                      >
+                    {(bulkStatus?.documents ?? []).map((doc) => (
+                      <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center flex-1">
                           <FileText className="h-4 w-4 text-gray-400 mr-3" />
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-900">{doc.filename}</p>
                             <div className="flex items-center gap-2 mt-1">
                               {doc.document_category && doc.document_category !== 'pending_classification' && (
-                                <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                  {doc.document_category}
-                                </span>
-                              )}
-                              {doc.document_subcategory && (
-                                <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
-                                  {doc.document_subcategory}
+                                <span className={`text-xs px-2 py-0.5 rounded ${getCategoryColor(doc.document_category)}`}>
+                                  {getCategoryLabel(doc.document_category, t)}
                                 </span>
                               )}
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center">
-                          {doc.processing_status === 'completed' && (
-                            <CheckCircle className="h-5 w-5 text-green-500" />
-                          )}
-                          {doc.processing_status === 'processing' && (
-                            <Loader2 className="h-5 w-5 text-purple-500 animate-spin" />
-                          )}
-                          {doc.processing_status === 'failed' && (
-                            <AlertCircle className="h-5 w-5 text-red-500" />
-                          )}
-                          {doc.processing_status === 'pending' && (
-                            <Clock className="h-5 w-5 text-gray-400" />
-                          )}
+                          {doc.processing_status === 'completed' && <CheckCircle className="h-5 w-5 text-green-500" />}
+                          {doc.processing_status === 'processing' && <Loader2 className="h-5 w-5 text-purple-500 animate-spin" />}
+                          {doc.processing_status === 'failed' && <AlertCircle className="h-5 w-5 text-red-500" />}
+                          {doc.processing_status === 'pending' && <Clock className="h-5 w-5 text-gray-400" />}
                         </div>
                       </div>
                     ))}
@@ -588,7 +588,7 @@ function DocumentsPageContent() {
 
                       {bulkStatus.synthesis.risk_level && (
                         <div className="mb-3">
-                          <span className="text-xs font-medium text-gray-700">{t('synthesis.riskLevel')}: </span>
+                          <span className="text-xs font-medium text-gray-700">{t('synthesis.riskLevel')} </span>
                           <span className={`text-xs px-2 py-1 rounded ${
                             bulkStatus.synthesis.risk_level === 'high' ? 'bg-red-100 text-red-700' :
                             bulkStatus.synthesis.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
@@ -603,7 +603,7 @@ function DocumentsPageContent() {
 
                       {bulkStatus.synthesis.key_findings && bulkStatus.synthesis.key_findings.length > 0 && (
                         <div className="mb-3">
-                          <p className="text-xs font-medium text-gray-700 mb-2">{t('synthesis.keyFindings')}:</p>
+                          <p className="text-xs font-medium text-gray-700 mb-2">{t('synthesis.keyFindings')}</p>
                           <ul className="space-y-1">
                             {bulkStatus.synthesis.key_findings.map((finding, idx) => (
                               <li key={idx} className="text-sm text-gray-700 flex items-start">
@@ -615,43 +615,21 @@ function DocumentsPageContent() {
                         </div>
                       )}
 
-                      {bulkStatus.synthesis.recommendations && bulkStatus.synthesis.recommendations.length > 0 && (
-                        <div className="mb-3">
-                          <p className="text-xs font-medium text-gray-700 mb-2">{t('synthesis.recommendations')}:</p>
-                          <ul className="space-y-1">
-                            {bulkStatus.synthesis.recommendations.map((rec, idx) => (
-                              <li key={idx} className="text-sm text-gray-700 flex items-start">
-                                <span className="text-pink-500 mr-2">&rarr;</span>
-                                {rec}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
                       {(bulkStatus.synthesis.total_annual_cost || bulkStatus.synthesis.total_one_time_cost) && (
                         <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-purple-200">
-                          {bulkStatus.synthesis.total_annual_cost && (
+                          {bulkStatus.synthesis.total_annual_cost !== undefined && bulkStatus.synthesis.total_annual_cost > 0 && (
                             <div>
                               <dt className="text-xs font-medium text-gray-500">{t('synthesis.totalAnnualCosts')}</dt>
                               <dd className="mt-1 text-lg font-semibold text-gray-900">
-                                {new Intl.NumberFormat('fr-FR', {
-                                  style: 'currency',
-                                  currency: 'EUR',
-                                  maximumFractionDigits: 0,
-                                }).format(bulkStatus.synthesis.total_annual_cost)}
+                                {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(bulkStatus.synthesis.total_annual_cost)}
                               </dd>
                             </div>
                           )}
-                          {bulkStatus.synthesis.total_one_time_cost && (
+                          {bulkStatus.synthesis.total_one_time_cost !== undefined && bulkStatus.synthesis.total_one_time_cost > 0 && (
                             <div>
                               <dt className="text-xs font-medium text-gray-500">{t('synthesis.totalOneTimeCosts')}</dt>
                               <dd className="mt-1 text-lg font-semibold text-gray-900">
-                                {new Intl.NumberFormat('fr-FR', {
-                                  style: 'currency',
-                                  currency: 'EUR',
-                                  maximumFractionDigits: 0,
-                                }).format(bulkStatus.synthesis.total_one_time_cost)}
+                                {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(bulkStatus.synthesis.total_one_time_cost)}
                               </dd>
                             </div>
                           )}
@@ -681,13 +659,26 @@ function DocumentsPageContent() {
                   </svg>
                   {t('propertySynthesis.title')}
                 </h2>
-                <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
-                  synthesis.risk_level === 'high' ? 'bg-red-100 text-red-700' :
-                  synthesis.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-green-100 text-green-700'
-                }`}>
-                  {t('propertySynthesis.risk', { level: synthesis.risk_level.toUpperCase() })}
-                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleRegenerateSynthesis}
+                    disabled={regenerating}
+                    className="inline-flex items-center px-3 py-1.5 border border-purple-300 text-xs font-medium rounded-lg text-purple-700 bg-white hover:bg-purple-50 disabled:opacity-50"
+                  >
+                    {regenerating ? (
+                      <><Loader2 className="h-3 w-3 mr-1 animate-spin" />{t('documentList.resynthesizing')}</>
+                    ) : (
+                      <><RefreshCw className="h-3 w-3 mr-1" />{t('documentList.resynthesize')}</>
+                    )}
+                  </button>
+                  <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                    synthesis.risk_level === 'high' ? 'bg-red-100 text-red-700' :
+                    synthesis.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {t('propertySynthesis.risk', { level: synthesis.risk_level?.toUpperCase() || '' })}
+                  </span>
+                </div>
               </div>
 
               <p className="text-gray-700 mb-6 leading-relaxed">{synthesis.overall_summary}</p>
@@ -696,21 +687,13 @@ function DocumentsPageContent() {
                 <div className="bg-white rounded-lg p-4 shadow">
                   <dt className="text-sm font-medium text-gray-500">{t('synthesis.totalAnnualCosts')}</dt>
                   <dd className="mt-2 text-3xl font-bold text-gray-900">
-                    {new Intl.NumberFormat('fr-FR', {
-                      style: 'currency',
-                      currency: 'EUR',
-                      maximumFractionDigits: 0,
-                    }).format(synthesis.total_annual_cost)}
+                    {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(synthesis.total_annual_cost || 0)}
                   </dd>
                 </div>
                 <div className="bg-white rounded-lg p-4 shadow">
                   <dt className="text-sm font-medium text-gray-500">{t('synthesis.totalOneTimeCosts')}</dt>
                   <dd className="mt-2 text-3xl font-bold text-gray-900">
-                    {new Intl.NumberFormat('fr-FR', {
-                      style: 'currency',
-                      currency: 'EUR',
-                      maximumFractionDigits: 0,
-                    }).format(synthesis.total_one_time_cost)}
+                    {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(synthesis.total_one_time_cost || 0)}
                   </dd>
                 </div>
               </div>
@@ -749,226 +732,154 @@ function DocumentsPageContent() {
             </div>
           )}
 
-          {/* Manual Upload Section Divider */}
-          <div className="mb-6 flex items-center">
-            <div className="flex-1 border-t border-gray-300"></div>
-            <div className="px-4 text-sm text-gray-500 font-medium">{t('manualUpload')}</div>
-            <div className="flex-1 border-t border-gray-300"></div>
-          </div>
+          {/* Document List */}
+          <div className="bg-white shadow rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">{t('documentList.title')}</h2>
+              {documents.length > 0 && (
+                <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedDocs.size === documents.length && documents.length > 0}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                  />
+                  {selectedDocs.size === documents.length ? t('deselectAll') : t('selectAll')}
+                </label>
+              )}
+            </div>
 
-          <div className="space-y-8">
-            {DOCUMENT_CATEGORIES.map((category) => {
-              const categoryDocs = documents[category.id] || [];
-              const categorySummary = summaries[category.id];
-              const Icon = category.icon;
+            {documents.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-sm">{t('documentList.emptyState')}</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-200">
+                {sortedCategories.map((category) => {
+                  const docs = groupedDocs[category];
+                  const isCollapsed = collapsedCategories.has(category);
 
-              return (
-                <div key={category.id} className="bg-white shadow rounded-lg overflow-hidden">
-                  <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <Icon className="h-6 w-6 text-white mr-3" />
-                        <div>
-                          <h2 className="text-xl font-semibold text-white">{category.label}</h2>
-                          <p className="text-sm text-blue-100">{category.description}</p>
+                  return (
+                    <div key={category}>
+                      {/* Category header */}
+                      <button
+                        onClick={() => toggleCategory(category)}
+                        className="w-full flex items-center justify-between px-6 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          {isCollapsed ? (
+                            <ChevronRight className="h-4 w-4 text-gray-500" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-gray-500" />
+                          )}
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${getCategoryColor(category)}`}>
+                            {getCategoryLabel(category, t)}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            {t('documentCount', { count: docs.length })}
+                          </span>
                         </div>
-                      </div>
-                      <div className="text-white text-sm">
-                        {t('documentCount', { count: categoryDocs.length })}
-                      </div>
-                    </div>
-                  </div>
+                      </button>
 
-                  <div className="p-6">
-                    <div className="mb-6">
-                      <div className="flex items-start gap-4">
-                        <div className="flex-1">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            {t('uploadDocuments')}
-                          </label>
-                          <label className="relative cursor-pointer">
-                            <input
-                              type="file"
-                              accept={category.acceptedTypes}
-                              multiple
-                              onChange={(e) => handleFileUpload(category.id, e.target.files)}
-                              disabled={uploading === category.id}
-                              className="hidden"
-                            />
-                            <div className={`flex items-center justify-center px-4 py-2 border-2 border-dashed rounded-md ${
-                              uploading === category.id
-                                ? 'border-gray-300 bg-gray-50 cursor-not-allowed'
-                                : 'border-blue-300 hover:border-blue-500 bg-blue-50 hover:bg-blue-100'
-                            }`}>
-                              {uploading === category.id ? (
-                                <>
-                                  <Loader2 className="h-5 w-5 mr-2 animate-spin text-blue-600" />
-                                  <span className="text-sm text-blue-600">{t('uploadingAnalyzing')}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Upload className="h-5 w-5 mr-2 text-blue-600" />
-                                  <span className="text-sm text-blue-600">
-                                    {t('chooseFiles', { type: category.acceptedTypes })}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
+                      {/* Documents in category */}
+                      {!isCollapsed && (
+                        <div className="divide-y divide-gray-100">
+                          {docs.map((doc) => {
+                            const isExpanded = expandedDoc === doc.id;
+                            return (
+                              <div key={doc.id} className="px-6 py-3 hover:bg-gray-50 transition-colors">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center flex-1 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedDocs.has(doc.id)}
+                                      onChange={() => toggleDocSelection(doc.id)}
+                                      className="h-4 w-4 text-blue-600 border-gray-300 rounded mr-3 flex-shrink-0"
+                                    />
+                                    <FileText className="h-4 w-4 text-gray-400 mr-3 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        {renamingDocId === doc.id ? (
+                                          <div className="flex items-center gap-1">
+                                            <input
+                                              type="text"
+                                              value={renameValue}
+                                              onChange={(e) => setRenameValue(e.target.value)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleSaveRename(doc);
+                                                if (e.key === 'Escape') handleCancelRename();
+                                              }}
+                                              className="text-sm font-medium text-gray-900 border border-gray-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                              autoFocus
+                                            />
+                                            <span className="text-xs text-gray-400">{doc.filename.substring(doc.filename.lastIndexOf('.'))}</span>
+                                            <button onClick={() => handleSaveRename(doc)} className="text-green-600 hover:text-green-800 p-0.5">
+                                              <Check className="h-4 w-4" />
+                                            </button>
+                                            <button onClick={handleCancelRename} className="text-gray-400 hover:text-gray-600 p-0.5">
+                                              <X className="h-4 w-4" />
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <h4 className="text-sm font-medium text-gray-900 truncate">{doc.filename}</h4>
+                                            <button
+                                              onClick={() => handleStartRename(doc)}
+                                              className="text-gray-400 hover:text-gray-600 p-0.5 flex-shrink-0"
+                                              title={t('renameDocument')}
+                                            >
+                                              <Pencil className="h-3.5 w-3.5" />
+                                            </button>
+                                          </>
+                                        )}
+                                        {doc.is_analyzed ? (
+                                          <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                        ) : (
+                                          <Loader2 className="h-4 w-4 text-blue-500 animate-spin flex-shrink-0" />
+                                        )}
+                                      </div>
+                                      <div className="flex items-center text-xs text-gray-500 gap-3 mt-0.5">
+                                        {doc.document_subcategory && (
+                                          <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+                                            {doc.document_subcategory.toUpperCase()}
+                                          </span>
+                                        )}
+                                        <span>{t('uploaded', { date: new Date(doc.upload_date).toLocaleDateString('fr-FR') })}</span>
+                                      </div>
+                                    </div>
+                                  </div>
 
-                    {(category.id === 'pv_ag' || category.id === 'diags') && categorySummary && (
-                      <div className="mb-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-4 border border-purple-200">
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {category.id === 'pv_ag' ? t('comprehensiveSummary') : t('diagnosticSummary')}
-                          </h3>
-                          <button
-                            onClick={() => handleRegenerateSummary(category.id)}
-                            disabled={regenerating === category.id}
-                            className="inline-flex items-center px-3 py-1 border border-purple-300 text-xs font-medium rounded text-purple-700 bg-white hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
-                          >
-                            {regenerating === category.id ? (
-                              <>
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                {t('regenerating')}
-                              </>
-                            ) : (
-                              <>
-                                <RefreshCw className="h-3 w-3 mr-1" />
-                                {t('regenerate')}
-                              </>
-                            )}
-                          </button>
-                        </div>
-
-                        {categorySummary.summary && (
-                          <div className="mb-4">
-                            <p className="text-sm text-gray-700">{categorySummary.summary}</p>
-                          </div>
-                        )}
-
-                        {categorySummary.key_findings && categorySummary.key_findings.length > 0 && (
-                          <div className="mb-4">
-                            <h4 className="text-sm font-medium text-gray-900 mb-2">{t('keyFindings')}</h4>
-                            <ul className="space-y-1">
-                              {categorySummary.key_findings.map((finding, idx) => (
-                                <li key={idx} className="text-sm text-gray-700 flex items-start">
-                                  <span className="text-purple-500 mr-2">&bull;</span>
-                                  {finding}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {(categorySummary.total_estimated_annual_cost || categorySummary.total_one_time_costs) && (
-                          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-purple-200">
-                            {categorySummary.total_estimated_annual_cost && (
-                              <div>
-                                <dt className="text-xs font-medium text-gray-500">{t('annualCosts')}</dt>
-                                <dd className="mt-1 text-lg font-semibold text-gray-900">
-                                  {new Intl.NumberFormat('fr-FR', {
-                                    style: 'currency',
-                                    currency: 'EUR',
-                                    maximumFractionDigits: 0,
-                                  }).format(categorySummary.total_estimated_annual_cost)}
-                                </dd>
-                              </div>
-                            )}
-                            {categorySummary.total_one_time_costs && (
-                              <div>
-                                <dt className="text-xs font-medium text-gray-500">{t('oneTimeCosts')}</dt>
-                                <dd className="mt-1 text-lg font-semibold text-gray-900">
-                                  {new Intl.NumberFormat('fr-FR', {
-                                    style: 'currency',
-                                    currency: 'EUR',
-                                    maximumFractionDigits: 0,
-                                  }).format(categorySummary.total_one_time_costs)}
-                                </dd>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {category.id === 'pv_ag' && categorySummary.copropriete_insights && (
-                          <div className="mt-4 pt-4 border-t border-purple-200">
-                            <h4 className="text-sm font-medium text-gray-900 mb-2">{t('coproInsights')}</h4>
-                            {categorySummary.copropriete_insights.payment_issues && (
-                              <div className="mb-2">
-                                <p className="text-xs font-medium text-gray-700">{t('paymentIssues')}:</p>
-                                <p className="text-sm text-gray-600">{categorySummary.copropriete_insights.payment_issues}</p>
-                              </div>
-                            )}
-                            {categorySummary.copropriete_insights.upcoming_works && (
-                              <div className="mb-2">
-                                <p className="text-xs font-medium text-gray-700">{t('upcomingWorks')}:</p>
-                                <p className="text-sm text-gray-600">{categorySummary.copropriete_insights.upcoming_works}</p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {category.id === 'diags' && categorySummary.diagnostic_issues && (
-                          <div className="mt-4 pt-4 border-t border-purple-200">
-                            <h4 className="text-sm font-medium text-gray-900 mb-2">{t('criticalIssues')}</h4>
-                            {categorySummary.diagnostic_issues.critical_issues && (
-                              <ul className="space-y-1">
-                                {categorySummary.diagnostic_issues.critical_issues.map((issue: string, idx: number) => (
-                                  <li key={idx} className="text-sm text-red-700 flex items-start">
-                                    <AlertCircle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-                                    {issue}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {categoryDocs.length > 0 ? (
-                      <div className="space-y-3">
-                        {categoryDocs.map((doc) => (
-                          <div
-                            key={doc.id}
-                            className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors"
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center">
-                                  <FileText className="h-5 w-5 text-gray-400 mr-2" />
-                                  <h4 className="text-sm font-medium text-gray-900">{doc.filename}</h4>
-                                  {doc.is_analyzed ? (
-                                    <CheckCircle className="h-4 w-4 text-green-500 ml-2" />
-                                  ) : (
-                                    <Loader2 className="h-4 w-4 text-blue-500 ml-2 animate-spin" />
-                                  )}
+                                  <div className="flex items-center gap-2 ml-4">
+                                    {doc.is_analyzed && doc.analysis_summary && (
+                                      <button
+                                        onClick={() => setExpandedDoc(isExpanded ? null : doc.id)}
+                                        className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+                                      >
+                                        {isExpanded ? t('documentList.collapseDetails') : t('documentList.expandDetails')}
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteDocument(doc.id)}
+                                      className="text-red-400 hover:text-red-600 p-1"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
                                 </div>
 
-                                <div className="mt-1 flex items-center text-xs text-gray-500 space-x-3">
-                                  {doc.document_subcategory && (
-                                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                                      {doc.document_subcategory.toUpperCase()}
-                                    </span>
-                                  )}
-                                  <span>{t('uploaded', { date: new Date(doc.upload_date).toLocaleDateString('fr-FR') })}</span>
-                                  <span>{(doc.file_size / 1024).toFixed(1)} KB</span>
-                                </div>
-
-                                {doc.is_analyzed && doc.analysis_summary && (
-                                  <div className="mt-3 bg-gray-50 rounded p-3">
+                                {/* Expanded analysis details */}
+                                {isExpanded && doc.is_analyzed && doc.analysis_summary && (
+                                  <div className="mt-3 ml-7 bg-gray-50 rounded-lg p-3">
                                     <p className="text-sm text-gray-700">{doc.analysis_summary}</p>
 
                                     {doc.key_insights && doc.key_insights.length > 0 && (
                                       <div className="mt-2">
-                                        <p className="text-xs font-medium text-gray-700 mb-1">{t('keyInsights')}:</p>
+                                        <p className="text-xs font-medium text-gray-700 mb-1">{t('keyInsights')}</p>
                                         <ul className="space-y-1">
                                           {doc.key_insights.map((insight, idx) => (
                                             <li key={idx} className="text-xs text-gray-600 flex items-start">
-                                              <span className="text-blue-500 mr-1">&bull;</span>
+                                              <span className="text-gray-400 mr-1">&bull;</span>
                                               {insight}
                                             </li>
                                           ))}
@@ -978,14 +889,11 @@ function DocumentsPageContent() {
 
                                     {doc.one_time_costs && doc.one_time_costs.length > 0 && (
                                       <div className="mt-2">
-                                        <p className="text-xs font-medium text-gray-700 mb-1">{t('costs')}:</p>
+                                        <p className="text-xs font-medium text-gray-700 mb-1">{t('costs')}</p>
                                         <ul className="space-y-1">
                                           {doc.one_time_costs.map((cost, idx) => (
                                             <li key={idx} className="text-xs text-gray-600">
-                                              {cost.item}: {new Intl.NumberFormat('fr-FR', {
-                                                style: 'currency',
-                                                currency: 'EUR',
-                                              }).format(cost.amount)}
+                                              {cost.item}: {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(cost.amount)}
                                               {cost.timeline && ` (${cost.timeline})`}
                                             </li>
                                           ))}
@@ -995,28 +903,90 @@ function DocumentsPageContent() {
                                   </div>
                                 )}
                               </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {/* Floating action bar for multi-select */}
+          {selectedDocs.size > 0 && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-20 bg-white shadow-lg rounded-full px-6 py-3 border border-gray-200 flex items-center gap-4">
+              <span className="text-sm font-medium text-gray-700">
+                {t('selectedCount', { count: selectedDocs.size })}
+              </span>
+              <button
+                onClick={() => setShowBulkDeleteConfirm(true)}
+                className="inline-flex items-center px-4 py-1.5 bg-red-600 text-white text-sm font-medium rounded-full hover:bg-red-700 transition-colors"
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                {t('deleteSelected')}
+              </button>
+              <button
+                onClick={() => setSelectedDocs(new Set())}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                {t('deselectAll')}
+              </button>
+            </div>
+          )}
 
-                              <button
-                                onClick={() => handleDeleteDocument(doc.id, category.id)}
-                                className="ml-4 text-red-600 hover:text-red-800"
-                              >
-                                <Trash2 className="h-5 w-5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+          {/* Bulk delete confirmation modal */}
+          {showBulkDeleteConfirm && (
+            <div className="fixed z-30 inset-0 overflow-y-auto" aria-labelledby="bulk-delete-title" role="dialog" aria-modal="true">
+              <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div
+                  className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+                  aria-hidden="true"
+                  onClick={() => !bulkDeleting && setShowBulkDeleteConfirm(false)}
+                ></div>
+                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                <div className="relative inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                  <div className="sm:flex sm:items-start">
+                    <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                      <Trash2 className="h-6 w-6 text-red-600" aria-hidden="true" />
+                    </div>
+                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                      <h3 className="text-lg leading-6 font-medium text-gray-900" id="bulk-delete-title">
+                        {t('bulkDeleteTitle')}
+                      </h3>
+                      <div className="mt-2">
+                        <p className="text-sm text-gray-500">
+                          {t('bulkDeleteMessage', { count: selectedDocs.size })}
+                        </p>
                       </div>
-                    ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                        <p className="text-sm">{t('noDocuments')}</p>
-                      </div>
-                    )}
+                    </div>
+                  </div>
+                  <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                    <button
+                      type="button"
+                      disabled={bulkDeleting}
+                      onClick={handleBulkDelete}
+                      className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {bulkDeleting ? (
+                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{tc('deleting')}</>
+                      ) : (
+                        tc('delete')
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={bulkDeleting}
+                      onClick={() => setShowBulkDeleteConfirm(false)}
+                      className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {tc('cancel')}
+                    </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

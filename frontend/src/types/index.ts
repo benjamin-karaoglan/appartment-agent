@@ -122,6 +122,19 @@ export interface DiagnosticAnalysis {
   recommendations: string[]
 }
 
+export interface PropertySynthesisPreview {
+  risk_level?: string
+  total_annual_cost?: number
+  total_one_time_cost?: number
+  key_findings?: string[]
+  document_count: number
+  redesign_count: number
+}
+
+export interface PropertyWithSynthesis extends Property {
+  synthesis?: PropertySynthesisPreview | null
+}
+
 export interface TaxChargesAnalysis {
   document_id: number
   document_type: string

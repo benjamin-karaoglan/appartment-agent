@@ -5,6 +5,7 @@ Processes documents individually using Gemini for classification
 and type-specific analysis. Handles PV AG, diagnostics, taxes, and charges.
 """
 
+import asyncio
 import base64
 import json
 import logging
@@ -137,7 +138,7 @@ class DocumentProcessor:
 
         if not images:
             logger.warning(f"No images for: {filename}")
-            return "unknown"
+            return "other"
 
         parts = self._build_image_parts(images[:3])
         parts.append(
@@ -145,17 +146,18 @@ class DocumentProcessor:
         )
 
         try:
-            response = self.client.models.generate_content(
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
                 model=self.model,
                 contents=[types.Content(role="user", parts=parts)],
                 config=self._get_config(max_tokens=50),
             )
             category = self._extract_text(response).strip().lower()
 
-            valid = {"pv_ag", "diagnostic", "diags", "taxe_fonciere", "charges"}
+            valid = {"pv_ag", "diagnostic", "diags", "taxe_fonciere", "charges", "other"}
             if category not in valid:
-                logger.warning(f"Invalid category '{category}' for {filename}")
-                return "unknown"
+                logger.warning(f"Invalid category '{category}' for {filename}, mapping to 'other'")
+                return "other"
 
             if category == "diagnostic":
                 category = "diags"
@@ -165,7 +167,7 @@ class DocumentProcessor:
 
         except Exception as e:
             logger.error(f"Classification error for {filename}: {e}")
-            return "unknown"
+            return "other"
 
     async def _process_with_prompt(self, document: Dict[str, Any], prompt: str) -> Dict[str, Any]:
         """Generic processing with custom prompt."""
@@ -176,7 +178,8 @@ class DocumentProcessor:
         parts.append(types.Part.from_text(text=prompt))
 
         try:
-            response = self.client.models.generate_content(
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
                 model=self.model,
                 contents=[types.Content(role="user", parts=parts)],
                 config=self._get_config(),
@@ -237,6 +240,17 @@ class DocumentProcessor:
         )
         return await self._process_with_prompt(document, prompt)
 
+    async def process_other(
+        self, document: Dict[str, Any], output_language: str = "French"
+    ) -> Dict[str, Any]:
+        """Process miscellaneous property document."""
+        prompt = get_prompt(
+            "dp_process_other",
+            filename=document.get("filename", ""),
+            output_language=output_language,
+        )
+        return await self._process_with_prompt(document, prompt)
+
     async def process_document(
         self, document: Dict[str, Any], output_language: str = "French"
     ) -> Dict[str, Any]:
@@ -254,18 +268,11 @@ class DocumentProcessor:
             "diagnostic": self.process_diagnostic,
             "taxe_fonciere": self.process_tax,
             "charges": self.process_charges,
+            "other": self.process_other,
         }
 
-        processor = processors.get(category)
-        if processor:
-            analysis = await processor(document, output_language=output_language)
-        else:
-            analysis = {
-                "summary": f"Unable to classify {filename}",
-                "key_insights": [],
-                "estimated_annual_cost": 0.0,
-                "one_time_costs": 0.0,
-            }
+        processor = processors.get(category, self.process_other)
+        analysis = await processor(document, output_language=output_language)
 
         return {
             "filename": filename,
@@ -290,7 +297,8 @@ class DocumentProcessor:
         )
 
         try:
-            response = self.client.models.generate_content(
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
                 model=self.model,
                 contents=[types.Content(role="user", parts=[types.Part.from_text(text=prompt)])],
                 config=self._get_config(max_tokens=1500),

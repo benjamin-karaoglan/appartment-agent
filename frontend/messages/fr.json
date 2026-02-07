@@ -145,7 +145,14 @@
       "deleteTitle": "Supprimer le bien",
       "deleteMessage": "Êtes-vous sûr de vouloir supprimer ce bien ? Cette action est irréversible. Tous les documents, analyses et photos associés seront définitivement supprimés.",
       "deleteFailed": "Échec de la suppression du bien. Veuillez réessayer.",
-      "deleteTooltip": "Supprimer le bien"
+      "deleteTooltip": "Supprimer le bien",
+      "risk": {
+        "low": "Risque faible",
+        "medium": "Risque moyen",
+        "high": "Risque élevé"
+      },
+      "annualCost": "Coûts annuels",
+      "documents": "{count, plural, one {# document} other {# documents}}"
     }
   },
   "propertyForm": {
@@ -200,6 +207,7 @@
       "analyzing": "Analyse en cours...",
       "manageDocuments": "Gérer les documents",
       "redesignStudio": "Studio de redesign d'appartement",
+      "toolsTitle": "Outils du bien",
       "simpleTooltip": {
         "title": "Analyse simple",
         "whatItDoes": "Affiche uniquement les ventes à la même adresse exacte (même immeuble).",
@@ -282,6 +290,17 @@
       "totalChange": "Variation totale :",
       "totalSalesAnalyzed": "Total des ventes analysées :"
     },
+    "aiAnalysis": {
+      "title": "Analyse IA du bien",
+      "noData": "Aucun document analysé pour l'instant",
+      "viewDocuments": "Télécharger et analyser des documents",
+      "riskLevel": "Niveau de risque",
+      "summary": "Résumé",
+      "keyFindings": "Points clés",
+      "recommendations": "Recommandations",
+      "annualCosts": "Coûts annuels",
+      "oneTimeCosts": "Coûts ponctuels"
+    },
     "deleteTitle": "Supprimer le bien",
     "deleteMessage": "Êtes-vous sûr de vouloir supprimer ce bien ? Cette action est irréversible. Tous les documents, analyses et photos associés seront définitivement supprimés.",
     "analyzeFailed": "Échec de l'analyse de prix",
@@ -330,7 +349,8 @@
       "pv_ag": { "label": "PV d'AG", "description": "Procès-verbaux d'assemblée générale" },
       "diags": { "label": "Diagnostics", "description": "Documents de diagnostic" },
       "taxe_fonciere": { "label": "Taxe Foncière", "description": "Documents de taxe foncière" },
-      "charges": { "label": "Charges", "description": "Charges de copropriété" }
+      "charges": { "label": "Charges", "description": "Charges de copropriété" },
+      "other": { "label": "Autres", "description": "Autres documents immobiliers" }
     },
     "documentCount": "{count, plural, one {# document} other {# documents}}",
     "uploadDocuments": "Télécharger des documents",
@@ -353,7 +373,24 @@
     "noDocuments": "Aucun document téléchargé",
     "bulkFailed": "Le traitement en lot a échoué. Vérifiez les erreurs de chaque document.",
     "processingTimeout": "Le traitement prend plus de temps que prévu. Veuillez vérifier plus tard.",
-    "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce document ?"
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce document ?",
+    "rename": "Renommer",
+    "renameDocument": "Renommer le document",
+    "selectAll": "Tout sélectionner",
+    "deselectAll": "Tout désélectionner",
+    "deleteSelected": "Supprimer la sélection",
+    "selectedCount": "{count, plural, one {# sélectionné} other {# sélectionnés}}",
+    "bulkDeleteTitle": "Supprimer les documents",
+    "bulkDeleteMessage": "Êtes-vous sûr de vouloir supprimer {count, plural, one {# document} other {# documents}} ? Cette action est irréversible.",
+    "documentList": {
+      "title": "Documents",
+      "expandDetails": "Voir les détails",
+      "collapseDetails": "Masquer les détails",
+      "resynthesize": "Régénérer la synthèse",
+      "resynthesizing": "Régénération...",
+      "noAnalysis": "Analyse en attente",
+      "emptyState": "Téléchargez des documents via la zone d'upload ci-dessus"
+    }
   },
   "photos": {
     "backToProperty": "Retour au bien",
