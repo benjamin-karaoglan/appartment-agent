@@ -3,11 +3,19 @@
 import { useState, useEffect, useRef } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
-import { ArrowLeft, Upload, Sparkles, Image as ImageIcon, Download, Trash2, X, Columns, Maximize2, Send, Plus, MessageSquare, Clock, Pencil, Check, LayoutGrid } from 'lucide-react';
+import { ArrowLeft, Upload, Sparkles, Image as ImageIcon, Download, Trash2, X, Columns, Maximize2, Send, Plus, MessageSquare, Clock, Pencil, Check, LayoutGrid, Star } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import api from '@/lib/api';
+
+interface PromotedRedesign {
+  id: number;
+  redesign_uuid: string;
+  style_preset?: string;
+  presigned_url?: string;
+  created_at: string;
+}
 
 interface Photo {
   id: number;
@@ -17,6 +25,7 @@ interface Photo {
   uploaded_at: string;
   presigned_url: string;
   redesign_count: number;
+  promoted_redesign?: PromotedRedesign | null;
 }
 
 interface Redesign {
@@ -401,6 +410,69 @@ function PhotosContent() {
     }
   };
 
+  const handlePromoteRedesign = async (photoId: number, redesignId: number) => {
+    try {
+      await api.patch(`/api/photos/${photoId}/promote/${redesignId}`);
+      // Update local state
+      setPhotos((prev) =>
+        prev.map((p) => {
+          if (p.id !== photoId) return p;
+          const rd = redesigns.find((r) => r.id === redesignId);
+          return {
+            ...p,
+            promoted_redesign: rd ? {
+              id: rd.id,
+              redesign_uuid: rd.redesign_uuid,
+              style_preset: rd.style_preset,
+              presigned_url: rd.presigned_url,
+              created_at: rd.created_at,
+            } : p.promoted_redesign,
+          };
+        })
+      );
+      if (selectedPhoto?.id === photoId) {
+        const rd = redesigns.find((r) => r.id === redesignId);
+        if (rd) {
+          setSelectedPhoto((prev) => prev ? {
+            ...prev,
+            promoted_redesign: {
+              id: rd.id,
+              redesign_uuid: rd.redesign_uuid,
+              style_preset: rd.style_preset,
+              presigned_url: rd.presigned_url,
+              created_at: rd.created_at,
+            },
+          } : prev);
+        }
+      }
+      setToastMessage(t('redesignPromoted'));
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (error: any) {
+      console.error('Error promoting redesign:', error);
+      alert(error.response?.data?.detail || t('promoteFailed'));
+    }
+  };
+
+  const handleDemoteRedesign = async (photoId: number) => {
+    try {
+      await api.delete(`/api/photos/${photoId}/promote`);
+      // Update local state
+      setPhotos((prev) =>
+        prev.map((p) =>
+          p.id === photoId ? { ...p, promoted_redesign: null } : p
+        )
+      );
+      if (selectedPhoto?.id === photoId) {
+        setSelectedPhoto((prev) => prev ? { ...prev, promoted_redesign: null } : prev);
+      }
+      setToastMessage(t('redesignDemoted'));
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (error: any) {
+      console.error('Error demoting redesign:', error);
+      alert(error.response?.data?.detail || t('promoteFailed'));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -528,7 +600,7 @@ function PhotosContent() {
                             {photo.filename}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {photo.room_type || t('noRoomType')} • {t('redesignCount', { count: photo.redesign_count })}
+                            {photo.room_type ? t(`roomTypes.${photo.room_type}`) : t('noRoomType')} • {t('redesignCount', { count: photo.redesign_count })}
                           </p>
                         </div>
                       </div>
@@ -730,6 +802,8 @@ function PhotosContent() {
                               return t('timeAgo.daysAgo', { n: days });
                             })();
 
+                            const isPromoted = selectedPhoto?.promoted_redesign?.id === redesign.id;
+
                             return (
                               <div key={redesign.id} className="group">
                                 {/* Image with hover overlay */}
@@ -742,20 +816,51 @@ function PhotosContent() {
                                     alt={`Redesign ${redesign.id}`}
                                     className="w-full h-full object-cover"
                                   />
+                                  {/* Promoted badge */}
+                                  {isPromoted && (
+                                    <div className="absolute top-2 left-2 z-10">
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-400 text-[10px] font-bold text-yellow-900 rounded">
+                                        <Star className="h-2.5 w-2.5 fill-current" />
+                                        {t('promoted')}
+                                      </span>
+                                    </div>
+                                  )}
                                   {/* Hover overlay */}
                                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-start justify-between p-2 opacity-0 group-hover:opacity-100">
                                     <span className="px-1.5 py-0.5 bg-black/60 text-[10px] font-semibold text-white rounded uppercase">
                                       {redesign.style_preset?.replace(/_/g, ' ') || t('custom')}
                                     </span>
-                                    <a
-                                      href={redesign.presigned_url}
-                                      download
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="p-1 bg-black/60 rounded text-white hover:bg-black/80 transition-colors"
-                                      title={tc('download')}
-                                    >
-                                      <Download className="h-3.5 w-3.5" />
-                                    </a>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (selectedPhoto) {
+                                            if (isPromoted) {
+                                              handleDemoteRedesign(selectedPhoto.id);
+                                            } else {
+                                              handlePromoteRedesign(selectedPhoto.id, redesign.id);
+                                            }
+                                          }
+                                        }}
+                                        className={`p-1 rounded transition-colors ${
+                                          isPromoted
+                                            ? 'bg-yellow-400 text-yellow-900 hover:bg-yellow-500'
+                                            : 'bg-black/60 text-white hover:bg-black/80'
+                                        }`}
+                                        title={isPromoted ? t('demoteRedesign') : t('promoteRedesign')}
+                                      >
+                                        <Star className={`h-3.5 w-3.5 ${isPromoted ? 'fill-current' : ''}`} />
+                                      </button>
+                                      <a
+                                        href={redesign.presigned_url}
+                                        download
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="p-1 bg-black/60 rounded text-white hover:bg-black/80 transition-colors"
+                                        title={tc('download')}
+                                      >
+                                        <Download className="h-3.5 w-3.5" />
+                                      </a>
+                                    </div>
                                   </div>
                                 </div>
                                 {/* Metadata row */}
@@ -850,24 +955,52 @@ function PhotosContent() {
                               {/* AI bubble */}
                               <div className="flex justify-start">
                                 <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-gray-100 p-2">
-                                  <img
-                                    src={redesign.presigned_url}
-                                    alt={`Redesign ${redesign.id}`}
-                                    className="w-full rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
-                                    onClick={() => setSelectedRedesign(redesign)}
-                                  />
+                                  <div className="relative">
+                                    <img
+                                      src={redesign.presigned_url}
+                                      alt={`Redesign ${redesign.id}`}
+                                      className="w-full rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
+                                      onClick={() => setSelectedRedesign(redesign)}
+                                    />
+                                    {selectedPhoto?.promoted_redesign?.id === redesign.id && (
+                                      <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-400 text-[10px] font-bold text-yellow-900 rounded">
+                                        <Star className="h-2.5 w-2.5 fill-current" />
+                                        {t('promoted')}
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="flex items-center justify-between mt-2 px-1">
                                     <span className="text-[10px] text-gray-500">
                                       {t('clickToView')}
                                     </span>
-                                    <a
-                                      href={redesign.presigned_url}
-                                      download
-                                      className="inline-flex items-center text-xs text-indigo-600 hover:text-indigo-700"
-                                    >
-                                      <Download className="h-3 w-3 mr-1" />
-                                      {tc('download')}
-                                    </a>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => {
+                                          if (!selectedPhoto) return;
+                                          if (selectedPhoto.promoted_redesign?.id === redesign.id) {
+                                            handleDemoteRedesign(selectedPhoto.id);
+                                          } else {
+                                            handlePromoteRedesign(selectedPhoto.id, redesign.id);
+                                          }
+                                        }}
+                                        className={`inline-flex items-center text-xs ${
+                                          selectedPhoto?.promoted_redesign?.id === redesign.id
+                                            ? 'text-yellow-600 hover:text-yellow-700'
+                                            : 'text-gray-400 hover:text-yellow-600'
+                                        }`}
+                                        title={selectedPhoto?.promoted_redesign?.id === redesign.id ? t('demoteRedesign') : t('promoteRedesign')}
+                                      >
+                                        <Star className={`h-3.5 w-3.5 ${selectedPhoto?.promoted_redesign?.id === redesign.id ? 'fill-current' : ''}`} />
+                                      </button>
+                                      <a
+                                        href={redesign.presigned_url}
+                                        download
+                                        className="inline-flex items-center text-xs text-indigo-600 hover:text-indigo-700"
+                                      >
+                                        <Download className="h-3 w-3 mr-1" />
+                                        {tc('download')}
+                                      </a>
+                                    </div>
                                   </div>
                                 </div>
                               </div>

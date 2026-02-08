@@ -9,13 +9,14 @@ import Header from '@/components/Header';
 import InfoTooltip from '@/components/InfoTooltip';
 import MarketTrendChart from '@/components/MarketTrendChart';
 import { api } from '@/lib/api';
-import { ArrowLeft, TrendingUp, FileText, Upload, Loader2, Trash2, ChevronDown, ChevronUp, Building2, ShieldCheck, AlertTriangle, ShieldAlert, Sparkles } from 'lucide-react';
+import { ArrowLeft, TrendingUp, FileText, Upload, Loader2, Trash2, ChevronDown, ChevronUp, Building2, ShieldCheck, AlertTriangle, ShieldAlert, Sparkles, Paintbrush, Image as ImageIcon, X, Columns, Pencil, Check } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import type { Property } from '@/types';
 
 function PropertyDetailContent() {
   const t = useTranslations('property');
   const tc = useTranslations('common');
+  const tp = useTranslations('photos');
   const params = useParams();
   const router = useRouter();
   const propertyId = params.id as string;
@@ -33,10 +34,34 @@ function PropertyDetailContent() {
   const [expandedSales, setExpandedSales] = useState<Set<number>>(new Set());
   const [synthesis, setSynthesis] = useState<any>(null);
   const [synthesisLoading, setSynthesisLoading] = useState(true);
+  const [showFullAnalysis, setShowFullAnalysis] = useState(false);
+  const [designPhotos, setDesignPhotos] = useState<any[]>([]);
+  const [previewPhoto, setPreviewPhoto] = useState<any>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editingRoomType, setEditingRoomType] = useState(false);
+  const [editRoomType, setEditRoomType] = useState('');
+
+  const roomTypeOptions = ['living room', 'bedroom', 'kitchen', 'bathroom', 'dining room', 'home office'];
+
+  const handleUpdatePhoto = async (photoId: number, updates: { filename?: string; room_type?: string }) => {
+    try {
+      await api.patch(`/api/photos/${photoId}`, updates);
+      // Update local state
+      setDesignPhotos((prev) =>
+        prev.map((p) => p.id === photoId ? { ...p, ...updates } : p)
+      );
+      setPreviewPhoto((prev: any) => prev?.id === photoId ? { ...prev, ...updates } : prev);
+    } catch (error) {
+      console.error('Failed to update photo:', error);
+    }
+  };
 
   useEffect(() => {
     loadProperty();
     loadSynthesis();
+    loadDesignPhotos();
   }, [propertyId]);
 
   const loadProperty = async () => {
@@ -61,6 +86,15 @@ function PropertyDetailContent() {
       setSynthesis(null);
     } finally {
       setSynthesisLoading(false);
+    }
+  };
+
+  const loadDesignPhotos = async () => {
+    try {
+      const response = await api.get(`/api/photos/?property_id=${propertyId}`);
+      setDesignPhotos(response.data.photos);
+    } catch (error) {
+      console.error('Failed to load design photos:', error);
     }
   };
 
@@ -460,90 +494,150 @@ function PropertyDetailContent() {
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
               </div>
-            ) : synthesis ? (
+            ) : synthesis ? (() => {
+              const sd = synthesis.synthesis_data;
+              const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+              const DIRECT_KEYS = ['taxe_fonciere', 'estimated_energy'];
+
+              // Compute tantièmes-adjusted totals
+              const overrides = sd?.user_overrides;
+              const lotT = overrides?.lot_tantiemes ?? sd?.tantiemes_info?.lot_tantiemes ?? null;
+              const totalT = overrides?.total_tantiemes ?? sd?.tantiemes_info?.total_tantiemes ?? null;
+              const ratio = (lotT != null && totalT != null && totalT > 0) ? lotT / totalT : null;
+
+              const annualTotal = sd?.annual_cost_breakdown
+                ? Object.entries(sd.annual_cost_breakdown).reduce((sum: number, [key, value]: [string, any]) => {
+                    const amt = typeof value === 'number' ? value : (value?.amount ?? 0);
+                    const isDirect = DIRECT_KEYS.includes(key);
+                    return sum + ((!isDirect && ratio != null) ? amt * ratio : amt);
+                  }, 0)
+                : synthesis.total_annual_cost ?? 0;
+
+              const oneTimeTotal = sd?.one_time_cost_breakdown?.length
+                ? sd.one_time_cost_breakdown.reduce((sum: number, item: any) => {
+                    const isDirect = item.cost_type === 'direct';
+                    return sum + ((!isDirect && ratio != null) ? item.amount * ratio : item.amount);
+                  }, 0)
+                : synthesis.total_one_time_cost ?? 0;
+
+              return (
               <div className="space-y-4">
-                {/* Risk badge */}
-                {synthesis.risk_level && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-500">{t('aiAnalysis.riskLevel')}:</span>
-                    <span className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-full ${
-                      synthesis.risk_level === 'high' ? 'bg-red-100 text-red-700' :
-                      synthesis.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-green-100 text-green-700'
-                    }`}>
-                      {synthesis.risk_level === 'high' ? (
-                        <ShieldAlert className="h-3.5 w-3.5 mr-1" />
-                      ) : synthesis.risk_level === 'medium' ? (
-                        <AlertTriangle className="h-3.5 w-3.5 mr-1" />
-                      ) : (
-                        <ShieldCheck className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      {synthesis.risk_level.toUpperCase()}
-                    </span>
-                  </div>
-                )}
-
-                {/* Summary */}
-                {synthesis.overall_summary && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-1">{t('aiAnalysis.summary')}</h3>
-                    <p className="text-sm text-gray-600 leading-relaxed">{synthesis.overall_summary}</p>
-                  </div>
-                )}
-
-                {/* Key findings */}
-                {synthesis.key_findings && synthesis.key_findings.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">{t('aiAnalysis.keyFindings')}</h3>
-                    <ul className="space-y-1">
-                      {synthesis.key_findings.map((finding: string, idx: number) => (
-                        <li key={idx} className="text-sm text-gray-600 flex items-start">
-                          <span className="text-gray-400 mr-2">&bull;</span>
-                          {finding}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Recommendations */}
-                {synthesis.recommendations && synthesis.recommendations.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">{t('aiAnalysis.recommendations')}</h3>
-                    <ul className="space-y-1">
-                      {synthesis.recommendations.map((rec: string, idx: number) => (
-                        <li key={idx} className="text-sm text-gray-600 flex items-start">
-                          <span className="text-gray-400 mr-2">&bull;</span>
-                          {rec}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Costs */}
-                {(synthesis.total_annual_cost > 0 || synthesis.total_one_time_cost > 0) && (
-                  <div className="grid grid-cols-2 gap-4 pt-3 border-t border-gray-100">
-                    {synthesis.total_annual_cost > 0 && (
+                {/* Metrics + Manage Documents */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-8">
+                    {/* Risk Level */}
+                    {synthesis.risk_level && (
                       <div>
-                        <dt className="text-xs font-medium text-gray-500">{t('aiAnalysis.annualCosts')}</dt>
-                        <dd className="mt-1 text-lg font-semibold text-gray-900">
-                          {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(synthesis.total_annual_cost)}
+                        <dt className="text-sm font-medium text-gray-500 mb-1">{t('aiAnalysis.riskLevel')}</dt>
+                        <dd>
+                          <span className={`inline-flex items-center text-lg font-semibold px-3 py-0.5 rounded-full ${
+                            synthesis.risk_level === 'high' ? 'bg-red-100 text-red-700' :
+                            synthesis.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {synthesis.risk_level === 'high' ? (
+                              <ShieldAlert className="h-5 w-5 mr-1.5" />
+                            ) : synthesis.risk_level === 'medium' ? (
+                              <AlertTriangle className="h-5 w-5 mr-1.5" />
+                            ) : (
+                              <ShieldCheck className="h-5 w-5 mr-1.5" />
+                            )}
+                            {synthesis.risk_level.toUpperCase()}
+                          </span>
                         </dd>
                       </div>
                     )}
-                    {synthesis.total_one_time_cost > 0 && (
+
+                    {/* Annual Costs */}
+                    {annualTotal > 0 && (
                       <div>
-                        <dt className="text-xs font-medium text-gray-500">{t('aiAnalysis.oneTimeCosts')}</dt>
-                        <dd className="mt-1 text-lg font-semibold text-gray-900">
-                          {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(synthesis.total_one_time_cost)}
-                        </dd>
+                        <dt className="text-sm font-medium text-gray-500 mb-1">{t('aiAnalysis.annualCosts')}</dt>
+                        <dd className="text-lg font-semibold text-gray-900">{fmt(annualTotal)}</dd>
+                      </div>
+                    )}
+
+                    {/* One-Time Costs */}
+                    {oneTimeTotal > 0 && (
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500 mb-1">{t('aiAnalysis.oneTimeCosts')}</dt>
+                        <dd className="text-lg font-semibold text-gray-900">{fmt(oneTimeTotal)}</dd>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Manage Documents button — right side */}
+                  <button
+                    onClick={() => router.push(`/properties/${propertyId}/documents`)}
+                    className="inline-flex items-center px-4 py-2 border border-purple-300 text-sm font-medium rounded-md text-purple-700 bg-white hover:bg-purple-50 transition-colors flex-shrink-0"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    {t('analysis.manageDocuments')}
+                  </button>
+                </div>
+
+                {/* Toggle button */}
+                <button
+                  onClick={() => setShowFullAnalysis(!showFullAnalysis)}
+                  className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 font-medium"
+                >
+                  {showFullAnalysis ? (
+                    <>
+                      <ChevronUp className="h-4 w-4 mr-1" />
+                      {t('aiAnalysis.showLess')}
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4 mr-1" />
+                      {t('aiAnalysis.showMore')}
+                    </>
+                  )}
+                </button>
+
+                {/* Expandable: Summary, Key Findings, Recommendations */}
+                {showFullAnalysis && (
+                  <div className="space-y-4 pt-2 border-t border-gray-100">
+                    {/* Summary */}
+                    {synthesis.overall_summary && (
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-700 mb-1">{t('aiAnalysis.summary')}</h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">{synthesis.overall_summary}</p>
+                      </div>
+                    )}
+
+                    {/* Key findings */}
+                    {synthesis.key_findings && synthesis.key_findings.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('aiAnalysis.keyFindings')}</h3>
+                        <ul className="space-y-1">
+                          {synthesis.key_findings.map((finding: string, idx: number) => (
+                            <li key={idx} className="text-sm text-gray-600 flex items-start">
+                              <span className="text-gray-400 mr-2">&bull;</span>
+                              {finding}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Recommendations */}
+                    {synthesis.recommendations && synthesis.recommendations.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('aiAnalysis.recommendations')}</h3>
+                        <ul className="space-y-1">
+                          {synthesis.recommendations.map((rec: string, idx: number) => (
+                            <li key={idx} className="text-sm text-gray-600 flex items-start">
+                              <span className="text-gray-400 mr-2">&bull;</span>
+                              {rec}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>
                 )}
               </div>
-            ) : (
+              );
+            })() : (
               <div className="text-center py-6">
                 <p className="text-sm text-gray-500 mb-3">{t('aiAnalysis.noData')}</p>
                 <button
@@ -556,6 +650,189 @@ function PropertyDetailContent() {
               </div>
             )}
           </div>
+
+          {/* Apartment Design Overview Card */}
+          <div className="bg-white shadow rounded-lg p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium text-gray-900 flex items-center">
+                <Paintbrush className="h-5 w-5 mr-2 text-indigo-500" />
+                {t('designOverview.title')}
+              </h2>
+              <button
+                onClick={() => router.push(`/properties/${propertyId}/photos`)}
+                className="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                {t('designOverview.openStudio')}
+              </button>
+            </div>
+            {(() => {
+              const photosWithRedesigns = designPhotos.filter((p: any) => p.promoted_redesign);
+              if (photosWithRedesigns.length === 0) {
+                return (
+                  <div className="text-center py-6">
+                    <ImageIcon className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                    <p className="text-sm text-gray-500 mb-3">{t('designOverview.noRedesigns')}</p>
+                    <button
+                      onClick={() => router.push(`/properties/${propertyId}/photos`)}
+                      className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      <Paintbrush className="h-4 w-4 mr-2" />
+                      {t('designOverview.goToStudio')}
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {photosWithRedesigns.map((photo: any) => (
+                    <div
+                      key={photo.id}
+                      className="group cursor-pointer"
+                      onClick={() => { setPreviewPhoto(photo); setShowOriginal(false); }}
+                    >
+                      <div className="relative aspect-video rounded-lg overflow-hidden">
+                        <img
+                          src={photo.promoted_redesign.presigned_url}
+                          alt={photo.filename}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                      </div>
+                      <div className="mt-1.5">
+                        <p className="text-sm font-medium text-gray-900 truncate">{photo.filename}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {photo.room_type ? tp(`roomTypes.${photo.room_type}`) : t('designOverview.noRoomType')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Design Preview Modal */}
+          {previewPhoto && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setPreviewPhoto(null)}>
+              <div className="relative bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div className="flex items-center gap-3 flex-wrap min-w-0">
+                    {/* Editable filename */}
+                    {editingName ? (
+                      <form
+                        className="flex items-center gap-1"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (editName.trim() && editName.trim() !== previewPhoto.filename) {
+                            handleUpdatePhoto(previewPhoto.id, { filename: editName.trim() });
+                          }
+                          setEditingName(false);
+                        }}
+                      >
+                        <input
+                          autoFocus
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onBlur={() => {
+                            if (editName.trim() && editName.trim() !== previewPhoto.filename) {
+                              handleUpdatePhoto(previewPhoto.id, { filename: editName.trim() });
+                            }
+                            setEditingName(false);
+                          }}
+                          className="text-lg font-semibold text-gray-900 border-b-2 border-indigo-500 outline-none bg-transparent px-0 py-0"
+                        />
+                        <button type="submit" className="p-0.5 text-indigo-600 hover:text-indigo-800">
+                          <Check className="h-4 w-4" />
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        className="group flex items-center gap-1.5"
+                        onClick={() => { setEditName(previewPhoto.filename); setEditingName(true); }}
+                      >
+                        <h3 className="text-lg font-semibold text-gray-900">{previewPhoto.filename}</h3>
+                        <Pencil className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    )}
+
+                    {/* Editable room type */}
+                    {editingRoomType ? (
+                      <select
+                        autoFocus
+                        value={editRoomType}
+                        onChange={(e) => {
+                          handleUpdatePhoto(previewPhoto.id, { room_type: e.target.value });
+                          setEditingRoomType(false);
+                        }}
+                        onBlur={() => setEditingRoomType(false)}
+                        className="text-xs font-medium rounded-full px-2.5 py-1 border border-indigo-300 bg-indigo-50 text-indigo-700 outline-none"
+                      >
+                        {roomTypeOptions.map((rt) => (
+                          <option key={rt} value={rt}>{tp(`roomTypes.${rt}`)}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <button
+                        className="group inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-colors"
+                        onClick={() => { setEditRoomType(previewPhoto.room_type || 'living room'); setEditingRoomType(true); }}
+                      >
+                        {previewPhoto.room_type ? tp(`roomTypes.${previewPhoto.room_type}`) : t('designOverview.noRoomType')}
+                        <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    )}
+
+                    {previewPhoto.promoted_redesign.style_preset && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 uppercase">
+                        {previewPhoto.promoted_redesign.style_preset.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={() => setPreviewPhoto(null)} className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 flex-shrink-0">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Image with compare toggle */}
+                <div className="relative h-[55vh] bg-gray-100">
+                  <img
+                    src={showOriginal ? previewPhoto.presigned_url : previewPhoto.promoted_redesign.presigned_url}
+                    alt={previewPhoto.filename}
+                    className="w-full h-full object-contain"
+                  />
+                  <button
+                    onClick={() => setShowOriginal(!showOriginal)}
+                    className={`absolute bottom-3 left-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium shadow-lg transition-colors ${
+                      showOriginal
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-white/90 text-gray-700 hover:bg-white'
+                    }`}
+                  >
+                    <Columns className="h-3.5 w-3.5" />
+                    {showOriginal ? t('designOverview.showRedesign') : t('designOverview.showOriginal')}
+                  </button>
+                </div>
+
+                {/* Prompt */}
+                {previewPhoto.promoted_redesign.prompt && (
+                  <div className="px-4 py-3 border-t border-gray-100">
+                    <p className="text-xs font-medium text-gray-500 mb-1">{t('designOverview.prompt')}</p>
+                    <p className="text-sm text-gray-700 line-clamp-3">{previewPhoto.promoted_redesign.prompt}</p>
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="flex justify-end p-4 border-t border-gray-200">
+                  <button
+                    onClick={() => { setPreviewPhoto(null); router.push(`/properties/${propertyId}/photos`); }}
+                    className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+                  >
+                    <Paintbrush className="h-4 w-4 mr-2" />
+                    {t('designOverview.goToStudioAction')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Market Trend Visualization */}
           {priceAnalysis && (
