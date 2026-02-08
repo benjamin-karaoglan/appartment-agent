@@ -42,6 +42,7 @@ services:
       # GCS bucket configuration (set these in your .env or export them)
       GCS_DOCUMENTS_BUCKET: ${GCS_DOCUMENTS_BUCKET:-}
       GCS_PHOTOS_BUCKET: ${GCS_PHOTOS_BUCKET:-}
+      GCS_SIGNING_SERVICE_ACCOUNT: ${GCS_SIGNING_SERVICE_ACCOUNT:-}
 
       # Google Cloud configuration
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}

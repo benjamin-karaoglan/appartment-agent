@@ -277,6 +277,10 @@ class GCSBackend(StorageBackend):
 
     def _get_service_account_email(self) -> str:
         """Get the service account email for URL signing."""
+        # Prefer explicit config setting
+        if settings.GCS_SIGNING_SERVICE_ACCOUNT:
+            return settings.GCS_SIGNING_SERVICE_ACCOUNT
+
         # Try to get service account email from credentials
         # Note: compute engine credentials return 'default' which is not valid for signing
         if hasattr(self._credentials, "service_account_email"):
@@ -370,16 +374,23 @@ class GCSBackend(StorageBackend):
         blob = bucket.blob(object_name)
         return blob.exists()
 
+    def _can_sign_natively(self) -> bool:
+        """Check if credentials can sign blobs without impersonation."""
+        from google.auth import credentials as ga_credentials
+
+        return isinstance(self._credentials, ga_credentials.Signing)
+
     def get_presigned_url(
         self, object_name: str, bucket_name: Optional[str] = None, expiry=None
     ) -> str:
         """
         Generate a signed URL for file access.
 
-        Uses IAM signBlob API when running with Application Default Credentials
-        (e.g., on Cloud Run) since compute engine credentials don't have private keys.
+        Uses IAM signBlob API via impersonation when credentials lack a private key
+        (e.g., user ADC, compute engine credentials). Service account keys and
+        impersonated credentials can sign directly.
         """
-        from google.auth import compute_engine, impersonated_credentials
+        from google.auth import impersonated_credentials
         from google.auth.transport import requests as google_requests
 
         bucket = self._get_bucket(bucket_name)
@@ -394,30 +405,27 @@ class GCSBackend(StorageBackend):
         try:
             blob = bucket.blob(object_name)
 
-            # Check if we're using compute engine credentials (ADC without private key)
-            if isinstance(self._credentials, compute_engine.Credentials):
-                # Use signing credentials via impersonation
-                # This requires the service account to have Service Account Token Creator role on itself
+            if self._can_sign_natively():
+                # Service account keys or impersonated credentials — sign directly
+                url = blob.generate_signed_url(version="v4", expiration=expires, method="GET")
+            else:
+                # User ADC or compute engine credentials — use impersonation to sign
+                # Requires Service Account Token Creator role on the target service account
                 auth_request = google_requests.Request()
                 self._credentials.refresh(auth_request)
 
-                # Create signing credentials that can sign blobs
                 signing_credentials = impersonated_credentials.Credentials(
                     source_credentials=self._credentials,
                     target_principal=self._service_account_email,
                     target_scopes=["https://www.googleapis.com/auth/cloud-platform"],
                 )
 
-                # Generate signed URL using the signing credentials
                 url = blob.generate_signed_url(
                     version="v4",
                     expiration=expires,
                     method="GET",
                     credentials=signing_credentials,
                 )
-            else:
-                # Standard signed URL generation with service account key
-                url = blob.generate_signed_url(version="v4", expiration=expires, method="GET")
 
             return url
         except Exception as e:
@@ -488,12 +496,9 @@ class StorageService:
         """Download a file from storage."""
         return self._backend.download_file(object_name, bucket_name)
 
-    def get_file(
-        self, minio_key: str = None, bucket_name: Optional[str] = None, storage_key: str = None
-    ) -> bytes:
-        """Alias for download_file (backward compatibility)."""
-        key = storage_key or minio_key
-        return self.download_file(key, bucket_name)
+    def get_file(self, storage_key: str, bucket_name: Optional[str] = None) -> bytes:
+        """Download a file from storage by key."""
+        return self.download_file(storage_key, bucket_name)
 
     def delete_file(self, object_name: str, bucket_name: Optional[str] = None) -> bool:
         """Delete a file from storage."""
@@ -504,43 +509,37 @@ class StorageService:
         return self._backend.file_exists(object_name, bucket_name)
 
     def get_presigned_url(
-        self, minio_key: str, bucket_name: Optional[str] = None, expiry=None
+        self, storage_key: str, bucket_name: Optional[str] = None, expiry=None
     ) -> str:
         """Generate a presigned/signed URL for file access (cached in Redis)."""
         bucket = bucket_name or self._backend.default_bucket
-        cache_key = f"presigned_url:{bucket}:{minio_key}"
+        cache_key = f"presigned_url:{bucket}:{storage_key}"
 
         cached = cache_get(cache_key)
         if cached is not None:
             return cached
 
-        url = self._backend.get_presigned_url(minio_key, bucket_name, expiry)
+        url = self._backend.get_presigned_url(storage_key, bucket_name, expiry)
 
         # Cache for 50 min (safety margin vs typical 60-min URL expiry)
         cache_set(cache_key, url, ttl=3000)
         return url
 
-    def get_file_url(self, object_name: str, expires_in: int = 3600) -> str:
-        """Alias for get_presigned_url (backward compatibility)."""
-        return self.get_presigned_url(object_name, expiry=expires_in)
-
     def list_files(self, prefix: str = "", bucket_name: Optional[str] = None) -> list[str]:
         """List files with optional prefix filter."""
         return self._backend.list_files(prefix, bucket_name)
 
-    # Legacy methods for backward compatibility
     def download_file_stream(self, object_name: str) -> BinaryIO:
-        """Download a file as a stream (MinIO only)."""
+        """Download a file as a stream."""
         if isinstance(self._backend, MinIOBackend):
             return self._backend.client.get_object(self._backend.default_bucket, object_name)
         else:
-            # For GCS, return BytesIO wrapper
             data = self.download_file(object_name)
             return BytesIO(data)
 
 
 # =============================================================================
-# Singleton and Backward Compatibility
+# Singleton
 # =============================================================================
 
 _instance: Optional[StorageService] = None
@@ -552,17 +551,3 @@ def get_storage_service() -> StorageService:
     if _instance is None:
         _instance = StorageService()
     return _instance
-
-
-# Backward compatibility aliases
-MinIOService = StorageService
-get_minio_service = get_storage_service
-minio_service = None
-
-
-def _get_minio_service():
-    """Lazy initialization for module-level singleton."""
-    global minio_service
-    if minio_service is None:
-        minio_service = get_storage_service()
-    return minio_service

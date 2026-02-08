@@ -50,9 +50,8 @@ class Document(Base):
     file_size = Column(Integer)  # in bytes
 
     # Object storage (storage-agnostic: works with MinIO, GCS, S3)
-    # Column names kept as minio_* for backward compatibility until migration
-    storage_key = Column("minio_key", String, nullable=True, index=True)  # Object key in storage
-    storage_bucket = Column("minio_bucket", String, nullable=True)  # Bucket name
+    storage_key = Column(String, nullable=True, index=True)
+    storage_bucket = Column(String, nullable=True)
     file_hash = Column(String(64), nullable=True, index=True)  # SHA-256 hash for deduplication
 
     # Temporal workflow tracking
