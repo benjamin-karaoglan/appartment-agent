@@ -77,6 +77,7 @@ class ImageGenerator:
         prompt: str,
         aspect_ratio: str = "16:9",
         conversation_history: Optional[List[Dict[str, Any]]] = None,
+        reference_images: Optional[List[bytes]] = None,
     ) -> Dict[str, Any]:
         """
         Redesign an apartment photo.
@@ -109,9 +110,12 @@ class ImageGenerator:
                         contents.append(types.Content(role=turn["role"], parts=parts))
 
             # Add current request
-            contents.append(
-                types.Content(role="user", parts=[image_part, types.Part.from_text(text=prompt)])
-            )
+            user_parts = [image_part]
+            if reference_images:
+                for ref_data in reference_images:
+                    user_parts.append(types.Part.from_bytes(data=ref_data, mime_type="image/png"))
+            user_parts.append(types.Part.from_text(text=prompt))
+            contents.append(types.Content(role="user", parts=user_parts))
 
             config = types.GenerateContentConfig(
                 response_modalities=["TEXT", "IMAGE"],
@@ -174,6 +178,7 @@ class ImageGenerator:
             "modern_norwegian": "redesign_modern_norwegian",
             "minimalist_scandinavian": "redesign_minimalist_scandinavian",
             "cozy_hygge": "redesign_cozy_hygge",
+            "fancy_dark_modern": "redesign_fancy_dark_modern",
         }
         template_name = template_map.get(base_style, "redesign_modern_norwegian")
         prompt = get_prompt(template_name, room_type=room_type)

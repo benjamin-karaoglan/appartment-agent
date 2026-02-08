@@ -545,7 +545,13 @@
     "promoted": "Promu",
     "redesignPromoted": "Redesign promu sur l'aperçu du bien",
     "redesignDemoted": "Redesign retiré de l'aperçu du bien",
-    "promoteFailed": "Échec de la mise à jour du redesign promu"
+    "promoteFailed": "Échec de la mise à jour du redesign promu",
+    "attachReference": "Joindre une image de référence",
+    "maxReferenceImages": "Maximum 2 images de référence",
+    "referenceImageTooLarge": "L'image de référence doit faire moins de 10 Mo",
+    "referenceImagesUploading": "Veuillez attendre la fin du téléchargement des images de référence",
+    "referenceImagesFailed": "Certaines images de référence n'ont pas pu être téléchargées. Veuillez les supprimer et réessayer.",
+    "referenceUploadFailed": "Échec du téléchargement de l'image de référence"
   },
   "properties": {
     "title": "Mes biens",

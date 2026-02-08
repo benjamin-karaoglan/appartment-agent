@@ -216,6 +216,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "fr": "Échec de la suppression de la photo : {error}",
         "en": "Failed to delete photo: {error}",
     },
+    "reference_image_too_large": {
+        "fr": "L'image de référence doit faire moins de 10 Mo",
+        "en": "Reference image must be under 10MB",
+    },
     # ── DVF Recommendations ──────────────────────────────────────────────
     "excellent_deal": {
         "fr": "Excellente affaire - En dessous du prix du marché",
@@ -273,6 +277,14 @@ MESSAGES: dict[str, dict[str, str]] = {
     "preset_cozy_hygge_desc": {
         "fr": "Chaleur enveloppante, textiles doux, éclairage d'ambiance, confort intimiste",
         "en": "Warm embrace, soft textiles, ambient lighting, intimate comfort",
+    },
+    "preset_fancy_dark_modern_name": {
+        "fr": "Fancy Dark Moderne",
+        "en": "Fancy Dark Modern",
+    },
+    "preset_fancy_dark_modern_desc": {
+        "fr": "Bois sombre, éclairage luxueux, élégance ultra-moderne, refonte totale",
+        "en": "Dark wood, luxurious lighting, ultra-modern elegance, full redesign",
     },
     # ── Style Preset Prompt Templates ────────────────────────────────────
     "preset_modern_norwegian_prompt": {
@@ -358,6 +370,34 @@ MESSAGES: dict[str, dict[str, str]] = {
             "- Add books stacked casually, a steaming mug on a side table\n"
             "- The atmosphere should evoke safety, comfort, and intimate togetherness\n"
             "- Lighting: cozy warm evening\n"
+            "Return only the edited image."
+        ),
+    },
+    "preset_fancy_dark_modern_prompt": {
+        "fr": (
+            "Tu es un architecte d'intérieur.\n"
+            "Redesigne entièrement ce {room_type} d'appartement dans un style ultra-moderne et luxueux :\n"
+            "- Conserve la géométrie de la pièce et les fenêtres\n"
+            "- Redesigne chaque élément de la pièce : mobilier, sol, murs, plafond, éclairage et décoration\n"
+            "- Utilise du bois sombre et noble partout — noyer, chêne fumé ou ébène foncé pour les sols, panneaux muraux et meubles\n"
+            "- L'éclairage doit être luxueux : bandes LED encastrées le long du plafond et du sol, suspensions design sculpturales, et spots d'accentuation chaleureux mettant en valeur les textures\n"
+            "- Mobilier : pièces contemporaines épurées avec cuir sombre, métal noir mat et accents en laiton brossé\n"
+            "- Murs : un mélange de panneaux en bois sombre, enduit anthracite profond et surfaces subtilement texturées\n"
+            "- Ajoute une décoration statement : art contemporain grand format, un lampadaire architectural, une console en marbre\n"
+            "- L'atmosphère générale doit être audacieuse, sophistiquée et résolument haut de gamme — comme un penthouse de luxe moderne\n"
+            "Retourne uniquement l'image modifiée."
+        ),
+        "en": (
+            "You are an interior architect.\n"
+            "Completely redesign this apartment {room_type} in an ultra-modern luxurious style:\n"
+            "- Keep room geometry and windows unchanged\n"
+            "- Redesign every element of the room: furniture, flooring, walls, ceiling, lighting, and decor\n"
+            "- Use rich, dark wood throughout — walnut, smoked oak, or dark ebony for floors, wall panels, and furniture\n"
+            "- Lighting must feel luxurious: recessed LED strips along ceiling and floor edges, sculptural designer pendant lights, and warm accent spotlights highlighting textures\n"
+            "- Furniture: sleek contemporary pieces with dark leather, matte black metal, and brushed brass accents\n"
+            "- Walls: a mix of dark wood paneling, deep charcoal plaster, and subtle textured surfaces\n"
+            "- Add statement decor: oversized contemporary art, an architectural floor lamp, a marble-topped console\n"
+            "- The overall atmosphere should feel bold, sophisticated, and unmistakably high-end — like a modern luxury penthouse\n"
             "Return only the edited image."
         ),
     },

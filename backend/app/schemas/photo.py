@@ -81,6 +81,18 @@ class RedesignRequest(BaseModel):
     parent_redesign_id: Optional[int] = Field(
         None, description="ID of parent redesign for multi-turn iteration"
     )
+    reference_image_keys: Optional[List[str]] = Field(
+        None, description="Storage keys of reference/inspiration images (max 2)"
+    )
+
+
+class ReferenceImageUploadResponse(BaseModel):
+    """Schema for reference image upload response."""
+
+    storage_key: str
+    presigned_url: str
+    file_size: int
+    mime_type: str
 
 
 class RedesignResponse(BaseModel):
@@ -105,6 +117,9 @@ class RedesignResponse(BaseModel):
     user_rating: Optional[int]
     presigned_url: Optional[str] = Field(
         None, description="Temporary URL to access the redesigned image"
+    )
+    reference_image_urls: Optional[List[str]] = Field(
+        None, description="Presigned URLs for reference images used in this redesign"
     )
 
     class Config:
@@ -182,6 +197,24 @@ class StylePresetsResponse(BaseModel):
                     "- Add books stacked casually, a steaming mug on a side table\n"
                     "- The atmosphere should evoke safety, comfort, and intimate togetherness\n"
                     "- Lighting: cozy warm evening\n"
+                    "Return only the edited image."
+                ),
+            },
+            {
+                "id": "fancy_dark_modern",
+                "name": "Fancy Dark Modern",
+                "description": "Dark wood, luxurious lighting, ultra-modern elegance, full redesign",
+                "prompt_template": (
+                    "You are an interior architect.\n"
+                    "Completely redesign this apartment {room_type} in an ultra-modern luxurious style:\n"
+                    "- Keep room geometry and windows unchanged\n"
+                    "- Redesign every element of the room: furniture, flooring, walls, ceiling, lighting, and decor\n"
+                    "- Use rich, dark wood throughout — walnut, smoked oak, or dark ebony for floors, wall panels, and furniture\n"
+                    "- Lighting must feel luxurious: recessed LED strips along ceiling and floor edges, sculptural designer pendant lights, and warm accent spotlights highlighting textures\n"
+                    "- Furniture: sleek contemporary pieces with dark leather, matte black metal, and brushed brass accents\n"
+                    "- Walls: a mix of dark wood paneling, deep charcoal plaster, and subtle textured surfaces\n"
+                    "- Add statement decor: oversized contemporary art, an architectural floor lamp, a marble-topped console\n"
+                    "- The overall atmosphere should feel bold, sophisticated, and unmistakably high-end — like a modern luxury penthouse\n"
                     "Return only the edited image."
                 ),
             },

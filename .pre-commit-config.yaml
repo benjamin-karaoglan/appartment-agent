@@ -89,14 +89,14 @@ repos:
     hooks:
       - id: eslint
         name: eslint (auto-fix)
-        entry: bash -c 'cd frontend && pnpm exec next lint --fix'
+        entry: bash -lc 'cd frontend && pnpm exec next lint --fix'
         language: system
         files: ^frontend/.*\.(js|jsx|ts|tsx)$
         pass_filenames: false
 
       - id: tsc
         name: tsc (type check)
-        entry: bash -c 'cd frontend && pnpm exec tsc --noEmit'
+        entry: bash -lc 'cd frontend && pnpm exec tsc --noEmit'
         language: system
         files: ^frontend/.*\.(ts|tsx)$
         pass_filenames: false

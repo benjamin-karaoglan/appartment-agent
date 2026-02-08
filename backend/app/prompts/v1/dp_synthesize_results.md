@@ -88,6 +88,7 @@ Rules:
 
 - Cross-reference documents: if a PV AG mentions voted works, check if they appear in charges documents as appels de fonds
 - Sum up ALL annual costs from individual documents for `total_annual_costs`
+- **TAXE FONCIÈRE IS MANDATORY**: If ANY document of type `taxe_fonciere` is present in the input, the `annual_cost_breakdown.taxe_fonciere.amount` MUST be greater than 0. Extract the total tax amount from the document's `estimated_annual_cost` or `extracted_data.tax_breakdown`. NEVER leave taxe_fonciere at 0 when a tax document exists — this is the single most important annual cost for a buyer.
 - Sum up ALL **unpaid** one-time costs for `total_one_time_costs` (exclude items with payment_status "paid")
 - `one_time_cost_breakdown[].status` MUST be exactly one of: `voted`, `estimated`, or `upcoming`. No other values are allowed. Use `voted` ONLY for items explicitly voted/approved at an Assemblée Générale (AG). Use `upcoming` for planned/future works discussed but not yet voted. Use `estimated` for everything else — including ALL items derived from DDT/diagnostic documents (DPE, plomb, amiante, électricité, gaz), which are technical assessments and recommendations, NOT AG votes.
 - `one_time_cost_breakdown[].year`: the year the cost applies to (when the work is scheduled or was voted). Use the actual year (e.g. 2023, 2024), not 0.

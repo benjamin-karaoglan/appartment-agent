@@ -184,6 +184,9 @@ function DocumentsPageContent() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadFileCount, setUploadFileCount] = useState(0);
 
+  // localStorage key for persisting upload state across reloads
+  const uploadStateKey = `bulk-upload-${propertyId}`;
+
   // Document list states
   const [expandedDoc, setExpandedDoc] = useState<number | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
@@ -224,15 +227,43 @@ function DocumentsPageContent() {
         const response = await api.get(`/api/documents?property_id=${propertyId}`);
         setDocuments(response.data);
 
-        // Detect documents still being processed and resume polling
-        const processingDocs = (response.data as Document[]).filter(
-          (d) => d.processing_status === 'processing' || d.processing_status === 'pending'
-        );
-        if (processingDocs.length > 0) {
-          const workflowId = processingDocs.find((d) => d.workflow_id)?.workflow_id;
-          if (workflowId) {
-            setBulkUploading(true);
-            pollBulkStatus(workflowId);
+        // Try to restore upload state from localStorage first
+        let resumed = false;
+        try {
+          const stored = localStorage.getItem(uploadStateKey);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const elapsed = Date.now() - (parsed.startTime || 0);
+            // Only restore if less than 30 minutes old
+            if (elapsed < 30 * 60 * 1000 && parsed.workflow_id) {
+              setBulkUploading(true);
+              setUploadPhase(parsed.phase || 'processing');
+              setUploadFileCount(parsed.fileCount || 0);
+              if (parsed.lastStatus) {
+                setBulkStatus(parsed.lastStatus);
+              }
+              pollBulkStatus(parsed.workflow_id);
+              resumed = true;
+            } else {
+              localStorage.removeItem(uploadStateKey);
+            }
+          }
+        } catch {
+          localStorage.removeItem(uploadStateKey);
+        }
+
+        // Fallback: detect documents still being processed from API
+        if (!resumed) {
+          const processingDocs = (response.data as Document[]).filter(
+            (d) => d.processing_status === 'processing' || d.processing_status === 'pending'
+          );
+          if (processingDocs.length > 0) {
+            const workflowId = processingDocs.find((d) => d.workflow_id)?.workflow_id;
+            if (workflowId) {
+              setBulkUploading(true);
+              setUploadPhase('processing');
+              pollBulkStatus(workflowId);
+            }
           }
         }
       } catch (error) {
@@ -423,12 +454,22 @@ function DocumentsPageContent() {
 
       setUploadPhase('processing');
       const { workflow_id } = response.data;
+
+      // Persist upload state to localStorage for reload recovery
+      localStorage.setItem(uploadStateKey, JSON.stringify({
+        workflow_id,
+        phase: 'processing',
+        fileCount: files.length,
+        startTime: Date.now(),
+      }));
+
       pollBulkStatus(workflow_id);
     } catch (err: any) {
       console.error('Bulk upload error:', err);
       setError(err.response?.data?.detail || 'Failed to upload documents');
       setBulkUploading(false);
       setUploadPhase('idle');
+      localStorage.removeItem(uploadStateKey);
     }
   };
 
@@ -436,14 +477,29 @@ function DocumentsPageContent() {
     const maxPolls = 300;
     let pollCount = 0;
 
+    const persistUploadState = (phase: string, lastStatus: BulkUploadStatus | null) => {
+      try {
+        const stored = localStorage.getItem(uploadStateKey);
+        const existing = stored ? JSON.parse(stored) : {};
+        localStorage.setItem(uploadStateKey, JSON.stringify({
+          ...existing,
+          workflow_id: workflowId,
+          phase,
+          lastStatus,
+        }));
+      } catch { /* ignore storage errors */ }
+    };
+
     const poll = async () => {
       try {
         const response = await api.get(`/api/documents/bulk-status/${workflowId}`);
         const status: BulkUploadStatus = response.data;
         setBulkStatus(status);
+        persistUploadState('processing', status);
 
         if (status.status === 'completed' || status.progress.percentage === 100) {
           setUploadPhase('synthesizing');
+          persistUploadState('synthesizing', status);
           let currentStatus = status;
           let synthesisAttempts = 0;
           const maxSynthesisAttempts = 20;
@@ -454,6 +510,7 @@ function DocumentsPageContent() {
               const synthResponse = await api.get(`/api/documents/bulk-status/${workflowId}`);
               currentStatus = synthResponse.data;
               setBulkStatus(currentStatus);
+              persistUploadState('synthesizing', currentStatus);
               if (currentStatus.synthesis) break;
               synthesisAttempts++;
             } catch (err) {
@@ -489,12 +546,14 @@ function DocumentsPageContent() {
 
           setBulkUploading(false);
           setUploadPhase('idle');
+          localStorage.removeItem(uploadStateKey);
           return;
         }
 
         if (status.status === 'failed') {
           setBulkUploading(false);
           setUploadPhase('idle');
+          localStorage.removeItem(uploadStateKey);
           setError(t('bulkFailed'));
           return;
         }
@@ -505,6 +564,7 @@ function DocumentsPageContent() {
         } else if (pollCount >= maxPolls) {
           setBulkUploading(false);
           setUploadPhase('idle');
+          localStorage.removeItem(uploadStateKey);
           setError(t('processingTimeout'));
         }
       } catch (err: any) {
@@ -515,6 +575,7 @@ function DocumentsPageContent() {
         } else {
           setBulkUploading(false);
           setUploadPhase('idle');
+          localStorage.removeItem(uploadStateKey);
           setError('Failed to check processing status');
         }
       }
@@ -1156,7 +1217,8 @@ function DocumentsPageContent() {
                       {Object.entries(sd.annual_cost_breakdown).map(([key, value]) => {
                         const entry = getAnnualCostEntry(value);
                         const effectiveAmount = annualOverrides[key] ?? entry.amount;
-                        if (effectiveAmount <= 0 && !(key in annualOverrides)) return null;
+                        // Always show taxe_fonciere if present (even with 0 amount) — it's critical info
+                        if (effectiveAmount <= 0 && !(key in annualOverrides) && key !== 'taxe_fonciere') return null;
                         const isDirect = DIRECT_COST_KEYS.includes(key);
                         const buyerAmount = (!isDirect && shareRatio != null) ? effectiveAmount * shareRatio : effectiveAmount;
                         const isOverridden = key in annualOverrides;

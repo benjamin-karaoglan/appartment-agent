@@ -6,10 +6,19 @@ import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import PyPDF2
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.core.better_auth_security import get_current_user_hybrid as get_current_user
@@ -87,16 +96,29 @@ async def _regenerate_overall_synthesis(
         # Build results list from stored analysis data
         results = []
         for doc in analyzed_docs:
+            result_data: Dict[str, Any] = {
+                "summary": doc.analysis_summary or "",
+                "key_insights": doc.key_insights or [],
+                "estimated_annual_cost": doc.estimated_annual_cost or 0.0,
+                "one_time_costs": doc.one_time_costs or [],
+            }
+            # Include full extracted_data so the AI synthesizer has complete context
+            # (e.g., detailed tax breakdown, diagnostic findings, charge details)
+            if doc.extracted_data:
+                try:
+                    extracted = (
+                        json.loads(doc.extracted_data)
+                        if isinstance(doc.extracted_data, str)
+                        else doc.extracted_data
+                    )
+                    result_data["extracted_data"] = extracted
+                except (json.JSONDecodeError, TypeError):
+                    pass
             results.append(
                 {
                     "filename": doc.filename,
                     "document_type": doc.document_category,
-                    "result": {
-                        "summary": doc.analysis_summary or "",
-                        "key_insights": doc.key_insights or [],
-                        "estimated_annual_cost": doc.estimated_annual_cost or 0.0,
-                        "one_time_costs": doc.one_time_costs or [],
-                    },
+                    "result": result_data,
                     "document_id": doc.id,
                 }
             )

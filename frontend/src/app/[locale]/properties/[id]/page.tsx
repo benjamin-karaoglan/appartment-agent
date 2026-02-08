@@ -40,8 +40,6 @@ function PropertyDetailContent() {
   const [showOriginal, setShowOriginal] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState('');
-  const [editingRoomType, setEditingRoomType] = useState(false);
-  const [editRoomType, setEditRoomType] = useState('');
   const [editingProperty, setEditingProperty] = useState(false);
   const [savingProperty, setSavingProperty] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -960,31 +958,16 @@ function PropertyDetailContent() {
                       </button>
                     )}
 
-                    {/* Editable room type */}
-                    {editingRoomType ? (
-                      <select
-                        autoFocus
-                        value={editRoomType}
-                        onChange={(e) => {
-                          handleUpdatePhoto(previewPhoto.id, { room_type: e.target.value });
-                          setEditingRoomType(false);
-                        }}
-                        onBlur={() => setEditingRoomType(false)}
-                        className="text-xs font-medium rounded-full px-2.5 py-1 border border-indigo-300 bg-indigo-50 text-indigo-700 outline-none"
-                      >
-                        {roomTypeOptions.map((rt) => (
-                          <option key={rt} value={rt}>{tp(`roomTypes.${rt}`)}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <button
-                        className="group inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-colors"
-                        onClick={() => { setEditRoomType(previewPhoto.room_type || 'living room'); setEditingRoomType(true); }}
-                      >
-                        {previewPhoto.room_type ? tp(`roomTypes.${previewPhoto.room_type}`) : t('designOverview.noRoomType')}
-                        <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
-                    )}
+                    {/* Room type selector */}
+                    <select
+                      value={previewPhoto.room_type || 'living room'}
+                      onChange={(e) => handleUpdatePhoto(previewPhoto.id, { room_type: e.target.value })}
+                      className="text-xs font-medium rounded-full px-2.5 py-1 bg-indigo-100 text-indigo-700 border-none outline-none cursor-pointer hover:bg-indigo-200 transition-colors appearance-auto"
+                    >
+                      {roomTypeOptions.map((rt) => (
+                        <option key={rt} value={rt}>{tp(`roomTypes.${rt}`)}</option>
+                      ))}
+                    </select>
 
                     {previewPhoto.promoted_redesign.style_preset && (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 uppercase">

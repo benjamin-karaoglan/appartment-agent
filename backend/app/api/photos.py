@@ -4,9 +4,18 @@ import logging
 import time
 import uuid
 from datetime import timedelta
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -24,6 +33,7 @@ from app.schemas.photo import (
     RedesignListResponse,
     RedesignRequest,
     RedesignResponse,
+    ReferenceImageUploadResponse,
     StylePresetsResponse,
 )
 from app.services.ai import get_image_generator
@@ -62,6 +72,10 @@ async def get_style_presets(request: Request) -> StylePresetsResponse:
             translated["name"] = translate("preset_cozy_hygge_name", locale)
             translated["description"] = translate("preset_cozy_hygge_desc", locale)
             translated["prompt_template"] = translate("preset_cozy_hygge_prompt", locale)
+        elif preset_id == "fancy_dark_modern":
+            translated["name"] = translate("preset_fancy_dark_modern_name", locale)
+            translated["description"] = translate("preset_fancy_dark_modern_desc", locale)
+            translated["prompt_template"] = translate("preset_fancy_dark_modern_prompt", locale)
         translated_presets.append(translated)
 
     return StylePresetsResponse(presets=translated_presets)
@@ -181,6 +195,75 @@ async def upload_photo(
         )
 
 
+@router.post("/references/upload", response_model=ReferenceImageUploadResponse)
+async def upload_reference_image(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """
+    Upload a reference/inspiration image for redesign prompts.
+
+    Returns a storage key to include in the redesign request.
+    Max file size: 10MB.
+    """
+    locale = get_local(request)
+
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if not file.content_type or file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=translate("file_must_be_image", locale),
+        )
+
+    try:
+        file_data = await file.read()
+        file_size = len(file_data)
+
+        # Validate file size (10MB limit)
+        max_size = 10 * 1024 * 1024
+        if file_size > max_size:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=translate("reference_image_too_large", locale),
+            )
+
+        # Get user UUID for path structure
+        user = db.query(User).filter(User.id == int(current_user)).first()
+        if not user or not user.uuid:
+            raise HTTPException(status_code=500, detail=translate("user_uuid_not_found", locale))
+        user_uuid = user.uuid
+
+        ref_uuid = str(uuid.uuid4())
+        storage_key = f"{user_uuid}/references/{ref_uuid}/{file.filename}"
+        storage_service = get_storage_service()
+        storage_service.upload_file(file_data=file_data, filename=storage_key, bucket_name="photos")
+
+        presigned_url = storage_service.get_presigned_url(
+            storage_key=storage_key, bucket_name="photos", expiry=timedelta(hours=1)
+        )
+
+        logger.info(f"Reference image uploaded: {storage_key}")
+
+        return ReferenceImageUploadResponse(
+            storage_key=storage_key,
+            presigned_url=presigned_url,
+            file_size=file_size,
+            mime_type=file.content_type,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading reference image: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=translate("failed_upload_photo", locale, error=str(e)),
+        )
+
+
 @router.post("/{photo_id}/redesign", response_model=RedesignResponse)
 async def create_redesign(
     photo_id: int,
@@ -272,6 +355,30 @@ async def create_redesign(
                 storage_key=photo.storage_key, bucket_name=photo.storage_bucket
             )
 
+        # Fetch reference images if provided
+        reference_images_data = []
+        reference_image_keys = redesign_request.reference_image_keys or []
+        if reference_image_keys:
+            if len(reference_image_keys) > 2:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Maximum 2 reference images allowed",
+                )
+            for ref_key in reference_image_keys:
+                # Validate key belongs to this user (path prefix check)
+                if not ref_key.startswith(f"{user_uuid}/references/"):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Invalid reference image key",
+                    )
+                try:
+                    ref_data = get_storage_service().get_file(
+                        storage_key=ref_key, bucket_name="photos"
+                    )
+                    reference_images_data.append(ref_data)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch reference image {ref_key}: {e}")
+
         # Generate redesign
         logger.info(f"Generating redesign for photo {photo_id} with prompt: {prompt[:100]}...")
 
@@ -280,6 +387,7 @@ async def create_redesign(
             prompt=prompt,
             aspect_ratio=redesign_request.aspect_ratio,
             conversation_history=conversation_history,
+            reference_images=reference_images_data if reference_images_data else None,
         )
 
         if not result.get("success"):
@@ -299,7 +407,10 @@ async def create_redesign(
 
         # Update conversation history for multi-turn
         new_conversation_history = conversation_history or []
-        new_conversation_history.append({"role": "user", "content": prompt})
+        user_turn: Dict[str, Any] = {"role": "user", "content": prompt}
+        if reference_image_keys:
+            user_turn["reference_image_keys"] = reference_image_keys
+        new_conversation_history.append(user_turn)
         new_conversation_history.append(
             {
                 "role": "model",
@@ -341,6 +452,16 @@ async def create_redesign(
             f"✅ Redesign {redesign.id} created for photo {photo_id} in {generation_time_ms}ms"
         )
 
+        # Generate presigned URLs for reference images
+        ref_urls = None
+        if reference_image_keys:
+            ref_urls = []
+            for ref_key in reference_image_keys:
+                ref_url = get_storage_service().get_presigned_url(
+                    storage_key=ref_key, bucket_name="photos", expiry=timedelta(hours=1)
+                )
+                ref_urls.append(ref_url)
+
         return RedesignResponse(
             id=redesign.id,
             redesign_uuid=redesign.redesign_uuid,
@@ -360,8 +481,11 @@ async def create_redesign(
             is_favorite=redesign.is_favorite,
             user_rating=redesign.user_rating,
             presigned_url=presigned_url,
+            reference_image_urls=ref_urls,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating redesign: {e}", exc_info=True)
         raise HTTPException(
@@ -500,13 +624,31 @@ async def list_redesigns(
     )
 
     # Build response with presigned URLs
+    storage = get_storage_service()
     redesign_responses = []
     for redesign in redesigns:
-        presigned_url = get_storage_service().get_presigned_url(
+        presigned_url = storage.get_presigned_url(
             storage_key=redesign.storage_key,
             bucket_name=redesign.storage_bucket,
             expiry=timedelta(hours=1),
         )
+
+        # Extract reference image keys from last user turn in conversation history
+        ref_urls = None
+        history: List[Dict[str, Any]] = redesign.conversation_history or []
+        # Find the last user turn that has reference_image_keys
+        for turn in reversed(history):
+            if turn.get("role") == "user" and turn.get("reference_image_keys"):
+                ref_keys = turn["reference_image_keys"]
+                ref_urls = []
+                for ref_key in ref_keys:
+                    ref_url = storage.get_presigned_url(
+                        storage_key=ref_key,
+                        bucket_name="photos",
+                        expiry=timedelta(hours=1),
+                    )
+                    ref_urls.append(ref_url)
+                break
 
         redesign_responses.append(
             RedesignResponse(
@@ -528,6 +670,7 @@ async def list_redesigns(
                 is_favorite=redesign.is_favorite,
                 user_rating=redesign.user_rating,
                 presigned_url=presigned_url,
+                reference_image_urls=ref_urls,
             )
         )
 

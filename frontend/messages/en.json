@@ -545,7 +545,13 @@
     "promoted": "Promoted",
     "redesignPromoted": "Redesign promoted to property overview",
     "redesignDemoted": "Redesign removed from property overview",
-    "promoteFailed": "Failed to update promoted redesign"
+    "promoteFailed": "Failed to update promoted redesign",
+    "attachReference": "Attach reference image",
+    "maxReferenceImages": "Maximum 2 reference images",
+    "referenceImageTooLarge": "Reference image must be under 10MB",
+    "referenceImagesUploading": "Please wait for reference images to finish uploading",
+    "referenceImagesFailed": "Some reference images failed to upload. Remove them and try again.",
+    "referenceUploadFailed": "Failed to upload reference image"
   },
   "properties": {
     "title": "My Properties",

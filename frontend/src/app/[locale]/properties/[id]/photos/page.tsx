@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
-import { ArrowLeft, Upload, Sparkles, Image as ImageIcon, Download, Trash2, X, Columns, Maximize2, Send, Plus, MessageSquare, Clock, Pencil, Check, LayoutGrid, Star } from 'lucide-react';
+import { ArrowLeft, Upload, Sparkles, Image as ImageIcon, Download, Trash2, X, Columns, Maximize2, Send, Plus, MessageSquare, Clock, Pencil, Check, LayoutGrid, Star, Paperclip, Loader2 } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -28,6 +28,15 @@ interface Photo {
   promoted_redesign?: PromotedRedesign | null;
 }
 
+interface ReferenceImage {
+  id: string;
+  file: File;
+  previewUrl: string;
+  status: 'uploading' | 'success' | 'error';
+  storageKey?: string;
+  errorMessage?: string;
+}
+
 interface Redesign {
   id: number;
   redesign_uuid: string;
@@ -41,6 +50,7 @@ interface Redesign {
   is_favorite: boolean;
   parent_redesign_id?: number | null;
   is_multi_turn: boolean;
+  reference_image_urls?: string[];
 }
 
 interface Thread {
@@ -83,6 +93,8 @@ function PhotosContent() {
   const [activeThreadId, setActiveThreadId] = useState<number | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [optimisticPrompt, setOptimisticPrompt] = useState<string | null>(null);
+  const [optimisticRefUrls, setOptimisticRefUrls] = useState<string[]>([]);
+  const [generatingThreadId, setGeneratingThreadId] = useState<number | null | 'new'>(null);
   const [threadNames, setThreadNames] = useState<Record<number, string>>({});
   const [editingThreadId, setEditingThreadId] = useState<number | null>(null);
   const [editingThreadName, setEditingThreadName] = useState('');
@@ -90,8 +102,11 @@ function PhotosContent() {
   const [photoNameDraft, setPhotoNameDraft] = useState('');
   const [showGallery, setShowGallery] = useState(false);
   const [expandedBubbles, setExpandedBubbles] = useState<Set<number>>(new Set());
+  const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const referenceInputRef = useRef<HTMLInputElement>(null);
 
   // Load thread names from localStorage
   useEffect(() => {
@@ -117,17 +132,21 @@ function PhotosContent() {
     loadPhotos();
   }, [propertyId]);
 
-  // Load redesigns when photo is selected + reset thread state
+  // Load redesigns when a *different* photo is selected + reset thread state
+  const selectedPhotoId = selectedPhoto?.id ?? null;
   useEffect(() => {
-    if (selectedPhoto) {
-      loadRedesigns(selectedPhoto.id);
+    if (selectedPhotoId !== null) {
+      loadRedesigns(selectedPhotoId);
       setActiveThreadId(null);
       setShowGallery(false);
       setOptimisticPrompt(null);
       setSelectedPreset('');
       setCustomPrompt('');
+      referenceImages.forEach((ref) => URL.revokeObjectURL(ref.previewUrl));
+      setReferenceImages([]);
     }
-  }, [selectedPhoto]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPhotoId]);
 
   useEffect(() => {
     if (!selectedPreset) return;
@@ -330,6 +349,92 @@ function PhotosContent() {
     }
   };
 
+  const addReferenceFile = async (file: File) => {
+    // Use a callback to read the current length to avoid stale closure
+    let currentLength = 0;
+    setReferenceImages((prev) => { currentLength = prev.length; return prev; });
+
+    if (currentLength >= 2) {
+      alert(t('maxReferenceImages'));
+      return;
+    }
+
+    // Validate file size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert(t('referenceImageTooLarge'));
+      return;
+    }
+
+    const id = crypto.randomUUID();
+    const previewUrl = URL.createObjectURL(file);
+
+    const newRef: ReferenceImage = {
+      id,
+      file,
+      previewUrl,
+      status: 'uploading',
+    };
+
+    setReferenceImages((prev) => [...prev, newRef]);
+
+    // Upload in background
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/api/photos/references/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      setReferenceImages((prev) =>
+        prev.map((ref) =>
+          ref.id === id
+            ? { ...ref, status: 'success' as const, storageKey: response.data.storage_key }
+            : ref
+        )
+      );
+    } catch (error: any) {
+      console.error('Error uploading reference image:', error);
+      setReferenceImages((prev) =>
+        prev.map((ref) =>
+          ref.id === id
+            ? { ...ref, status: 'error' as const, errorMessage: error.response?.data?.detail || t('referenceUploadFailed') }
+            : ref
+        )
+      );
+    }
+  };
+
+  const handleReferenceImageSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+    addReferenceFile(file);
+  };
+
+  const handlePaste = (event: React.ClipboardEvent) => {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        event.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          addReferenceFile(file);
+        }
+        return;
+      }
+    }
+  };
+
+  const removeReferenceImage = (id: string) => {
+    setReferenceImages((prev) => {
+      const img = prev.find((ref) => ref.id === id);
+      if (img) URL.revokeObjectURL(img.previewUrl);
+      return prev.filter((ref) => ref.id !== id);
+    });
+  };
+
   const handleGenerateRedesign = async () => {
     if (!selectedPhoto) {
       alert(t('selectPhotoFirst'));
@@ -341,20 +446,43 @@ function PhotosContent() {
       return;
     }
 
+    // Validate reference images
+    const hasUploading = referenceImages.some((ref) => ref.status === 'uploading');
+    if (hasUploading) {
+      alert(t('referenceImagesUploading'));
+      return;
+    }
+    const hasFailed = referenceImages.some((ref) => ref.status === 'error');
+    if (hasFailed) {
+      alert(t('referenceImagesFailed'));
+      return;
+    }
+
     const activeThread = threads.find((th) => th.id === activeThreadId);
     const isFollowUp = activeThread && activeThread.messages.length > 0;
     const parentId = isFollowUp ? activeThread.messages[activeThread.messages.length - 1].id : undefined;
 
+    // Track which thread is generating so the loading indicator stays scoped
+    const currentThreadId = isFollowUp ? activeThreadId : 'new';
+    setGeneratingThreadId(currentThreadId);
+
     // Set optimistic prompt for immediate visual feedback
     setOptimisticPrompt(customPrompt || selectedPreset);
+    setOptimisticRefUrls(referenceImages.map((ref) => ref.previewUrl));
 
     try {
       setGenerating(true);
+
+      // Collect reference image keys
+      const refKeys = referenceImages
+        .filter((ref) => ref.status === 'success' && ref.storageKey)
+        .map((ref) => ref.storageKey);
 
       const body: Record<string, unknown> = {
         custom_prompt: customPrompt || undefined,
         room_type: selectedPhoto.room_type || roomType,
         aspect_ratio: '16:9',
+        reference_image_keys: refKeys.length > 0 ? refKeys : undefined,
       };
 
       if (isFollowUp) {
@@ -371,20 +499,34 @@ function PhotosContent() {
       // For new threads, set active thread to the new redesign's id
       if (!isFollowUp) {
         setActiveThreadId(newRedesign.id);
+
+        // Auto-generate a short thread title from the custom prompt
+        if (!selectedPreset && customPrompt) {
+          const title = customPrompt.length <= 30
+            ? customPrompt.split('\n')[0]
+            : customPrompt.substring(0, 30).replace(/\s+\S*$/, '') + '...';
+          saveThreadName(newRedesign.id, title);
+        }
       }
 
       // Clear inputs
       setSelectedPreset('');
       setCustomPrompt('');
       setOptimisticPrompt(null);
+      setOptimisticRefUrls([]);
+      // Clean up reference image previews
+      referenceImages.forEach((ref) => URL.revokeObjectURL(ref.previewUrl));
+      setReferenceImages([]);
       setToastMessage(t('redesignGenerated'));
       setTimeout(() => setToastMessage(null), 3000);
     } catch (error: any) {
       console.error('Error generating redesign:', error);
       setOptimisticPrompt(null);
+      setOptimisticRefUrls([]);
       alert(error.response?.data?.detail || t('generateFailed'));
     } finally {
       setGenerating(false);
+      setGeneratingThreadId(null);
     }
   };
 
@@ -672,88 +814,96 @@ function PhotosContent() {
                   </div>
 
                   {/* 7b: Thread Tabs */}
-                  <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 overflow-x-auto">
-                    <button
-                      onClick={() => {
-                        setActiveThreadId(null);
-                        setShowGallery(false);
-                        setSelectedPreset('');
-                        setCustomPrompt('');
-                      }}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
-                        activeThreadId === null && !showGallery
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      <Plus className="h-3 w-3" />
-                      {t('newThread')}
-                    </button>
-                    {threads.map((thread, idx) => {
-                      const defaultLabel = thread.messages[0]?.style_preset?.replace(/_/g, ' ') || `${t('thread')} ${threads.length - idx}`;
-                      const displayName = threadNames[thread.id] || defaultLabel;
+                  <div className="flex items-center border-b border-gray-100">
+                    <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto flex-1 min-w-0">
+                      <button
+                        onClick={() => {
+                          setActiveThreadId(null);
+                          setShowGallery(false);
+                          setSelectedPreset('');
+                          setCustomPrompt('');
+                        }}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                          activeThreadId === null && !showGallery
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        <Plus className="h-3 w-3" />
+                        {t('newThread')}
+                      </button>
+                      {threads.map((thread, idx) => {
+                        const firstMsg = thread.messages[0];
+                        const promptLabel = firstMsg?.prompt
+                          ? (firstMsg.prompt.length <= 30
+                              ? firstMsg.prompt.split('\n')[0]
+                              : firstMsg.prompt.substring(0, 30).replace(/\s+\S*$/, '') + '...')
+                          : null;
+                        const defaultLabel = firstMsg?.style_preset?.replace(/_/g, ' ') || promptLabel || `${t('thread')} ${threads.length - idx}`;
+                        const displayName = threadNames[thread.id] || defaultLabel;
 
-                      if (editingThreadId === thread.id) {
-                        return (
-                          <form
-                            key={thread.id}
-                            className="flex items-center gap-1"
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              saveThreadName(thread.id, editingThreadName || defaultLabel);
-                              setEditingThreadId(null);
-                            }}
-                          >
-                            <input
-                              autoFocus
-                              value={editingThreadName}
-                              onChange={(e) => setEditingThreadName(e.target.value)}
-                              onBlur={() => {
+                        if (editingThreadId === thread.id) {
+                          return (
+                            <form
+                              key={thread.id}
+                              className="flex items-center gap-1"
+                              onSubmit={(e) => {
+                                e.preventDefault();
                                 saveThreadName(thread.id, editingThreadName || defaultLabel);
                                 setEditingThreadId(null);
                               }}
-                              onKeyDown={(e) => { if (e.key === 'Escape') setEditingThreadId(null); }}
-                              className="text-xs font-medium border border-purple-300 rounded-full px-2.5 py-1 w-32 focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
-                            />
-                            <button type="submit" className="text-green-600 hover:text-green-700 flex-shrink-0">
-                              <Check className="h-3 w-3" />
-                            </button>
-                          </form>
+                            >
+                              <input
+                                autoFocus
+                                value={editingThreadName}
+                                onChange={(e) => setEditingThreadName(e.target.value)}
+                                onBlur={() => {
+                                  saveThreadName(thread.id, editingThreadName || defaultLabel);
+                                  setEditingThreadId(null);
+                                }}
+                                onKeyDown={(e) => { if (e.key === 'Escape') setEditingThreadId(null); }}
+                                className="text-xs font-medium border border-purple-300 rounded-full px-2.5 py-1 w-32 focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
+                              />
+                              <button type="submit" className="text-green-600 hover:text-green-700 flex-shrink-0">
+                                <Check className="h-3 w-3" />
+                              </button>
+                            </form>
+                          );
+                        }
+
+                        return (
+                          <button
+                            key={thread.id}
+                            onClick={() => {
+                              setActiveThreadId(thread.id);
+                              setShowGallery(false);
+                              setSelectedPreset('');
+                              setCustomPrompt('');
+                            }}
+                            onDoubleClick={(e) => {
+                              e.preventDefault();
+                              setEditingThreadId(thread.id);
+                              setEditingThreadName(displayName);
+                            }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                              activeThreadId === thread.id && !showGallery
+                                ? 'bg-purple-100 text-purple-700 ring-1 ring-purple-300'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                            title={t('doubleClickToRename')}
+                          >
+                            <MessageSquare className="h-3 w-3" />
+                            {displayName}
+                            <span className="text-[10px] opacity-70">({thread.messages.length})</span>
+                          </button>
                         );
-                      }
+                      })}
+                    </div>
 
-                      return (
-                        <button
-                          key={thread.id}
-                          onClick={() => {
-                            setActiveThreadId(thread.id);
-                            setShowGallery(false);
-                            setSelectedPreset('');
-                            setCustomPrompt('');
-                          }}
-                          onDoubleClick={(e) => {
-                            e.preventDefault();
-                            setEditingThreadId(thread.id);
-                            setEditingThreadName(displayName);
-                          }}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                            activeThreadId === thread.id && !showGallery
-                              ? 'bg-purple-100 text-purple-700 ring-1 ring-purple-300'
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
-                          title={t('doubleClickToRename')}
-                        >
-                          <MessageSquare className="h-3 w-3" />
-                          {displayName}
-                          <span className="text-[10px] opacity-70">({thread.messages.length})</span>
-                        </button>
-                      );
-                    })}
-
-                    {/* Divider + All Redesigns gallery tab */}
+                    {/* All Redesigns gallery tab — pinned right */}
                     {redesigns.length > 0 && (
-                      <>
-                        <div className="h-5 w-px bg-gray-300 flex-shrink-0" />
+                      <div className="flex items-center gap-2 pr-4 py-2 flex-shrink-0">
+                        <div className="h-5 w-px bg-gray-300" />
                         <button
                           onClick={() => setShowGallery(true)}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
@@ -766,7 +916,7 @@ function PhotosContent() {
                           {t('allGallery')}
                           <span className="text-[10px] opacity-70">({redesigns.length})</span>
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
 
@@ -787,8 +937,14 @@ function PhotosContent() {
                             const parentThread = threads.find((th) =>
                               th.messages.some((m) => m.id === redesign.id)
                             );
+                            const galleryFirstMsg = parentThread?.messages[0];
+                            const galleryPromptLabel = galleryFirstMsg?.prompt
+                              ? (galleryFirstMsg.prompt.length <= 30
+                                  ? galleryFirstMsg.prompt.split('\n')[0]
+                                  : galleryFirstMsg.prompt.substring(0, 30).replace(/\s+\S*$/, '') + '...')
+                              : null;
                             const threadLabel = parentThread
-                              ? threadNames[parentThread.id] || parentThread.messages[0]?.style_preset?.replace(/_/g, ' ') || t('thread')
+                              ? threadNames[parentThread.id] || galleryFirstMsg?.style_preset?.replace(/_/g, ' ') || galleryPromptLabel || t('thread')
                               : t('thread');
 
                             const timeAgo = (() => {
@@ -934,6 +1090,20 @@ function PhotosContent() {
                                       {isExpanded ? t('showLess') : t('showMore')}
                                     </button>
                                   )}
+                                  {/* Reference image thumbnails in user bubble */}
+                                  {redesign.reference_image_urls && redesign.reference_image_urls.length > 0 && (
+                                    <div className="flex gap-1.5 mt-2">
+                                      {redesign.reference_image_urls.map((url, idx) => (
+                                        <img
+                                          key={idx}
+                                          src={url}
+                                          alt={`Reference ${idx + 1}`}
+                                          onClick={() => setPreviewImageUrl(url)}
+                                          className="h-12 w-12 rounded-md object-cover border border-white/30 cursor-pointer hover:opacity-80 transition-opacity"
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
                                   <div className="flex items-center gap-2 mt-2">
                                     {redesign.style_preset && (
                                       <span className="px-1.5 py-0.5 bg-white/20 text-[10px] font-semibold rounded uppercase">
@@ -1009,14 +1179,27 @@ function PhotosContent() {
                           });
                         })()}
 
-                        {/* Optimistic user bubble + typing indicator while generating */}
-                        {generating && optimisticPrompt && (
+                        {/* Optimistic user bubble + typing indicator while generating (scoped to the thread that initiated it) */}
+                        {generating && optimisticPrompt && ((activeThreadId === null && generatingThreadId === 'new') || generatingThreadId === activeThreadId) && (
                           <div className="space-y-3">
                             <div className="flex justify-end">
                               <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-purple-600 text-white px-4 py-3">
                                 <p className="text-sm whitespace-pre-wrap">
                                   {optimisticPrompt.length > 300 ? optimisticPrompt.substring(0, 300) + '...' : optimisticPrompt}
                                 </p>
+                                {optimisticRefUrls.length > 0 && (
+                                  <div className="flex gap-1.5 mt-2">
+                                    {optimisticRefUrls.map((url, idx) => (
+                                      <img
+                                        key={idx}
+                                        src={url}
+                                        alt={`Reference ${idx + 1}`}
+                                        onClick={() => setPreviewImageUrl(url)}
+                                        className="h-12 w-12 rounded-md object-cover border border-white/30 cursor-pointer hover:opacity-80 transition-opacity"
+                                      />
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div className="flex justify-start">
@@ -1074,7 +1257,56 @@ function PhotosContent() {
                                 </div>
                               )}
 
+                              {/* Reference image thumbnails */}
+                              {referenceImages.length > 0 && (
+                                <div className="flex gap-2 mb-2">
+                                  {referenceImages.map((ref) => (
+                                    <div key={ref.id} className="relative group">
+                                      <img
+                                        src={ref.previewUrl}
+                                        alt="Reference"
+                                        onClick={() => setPreviewImageUrl(ref.previewUrl)}
+                                        className={`h-14 w-14 rounded-lg object-cover border-2 cursor-pointer ${
+                                          ref.status === 'error' ? 'border-red-400' : ref.status === 'uploading' ? 'border-yellow-400' : 'border-green-400'
+                                        }`}
+                                      />
+                                      {ref.status === 'uploading' && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
+                                          <Loader2 className="h-4 w-4 text-white animate-spin" />
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={() => removeReferenceImage(ref.id)}
+                                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-gray-800 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title={tc('delete')}
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                      {ref.status === 'error' && (
+                                        <p className="text-[9px] text-red-500 mt-0.5 max-w-[56px] truncate">{ref.errorMessage}</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
                               <div className="flex gap-2 items-end">
+                                {/* Hidden file input for reference images */}
+                                <input
+                                  ref={referenceInputRef}
+                                  type="file"
+                                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                                  onChange={handleReferenceImageSelect}
+                                  className="hidden"
+                                />
+                                <button
+                                  onClick={() => referenceInputRef.current?.click()}
+                                  disabled={referenceImages.length >= 2}
+                                  className="flex-shrink-0 p-2.5 text-gray-500 hover:text-purple-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
+                                  title={referenceImages.length >= 2 ? t('maxReferenceImages') : t('attachReference')}
+                                >
+                                  <Paperclip className="h-5 w-5" />
+                                </button>
                                 <textarea
                                   ref={textareaRef}
                                   value={customPrompt}
@@ -1090,6 +1322,7 @@ function PhotosContent() {
                                       }
                                     }
                                   }}
+                                  onPaste={handlePaste}
                                   placeholder={isFollowUp ? t('refinePlaceholder') : t('promptPlaceholder')}
                                   rows={1}
                                   style={{ minHeight: '40px', maxHeight: '200px' }}
@@ -1235,6 +1468,30 @@ function PhotosContent() {
             <img
               src={selectedPhoto.presigned_url}
               alt={selectedPhoto.filename}
+              className="h-full w-full rounded-lg object-contain"
+            />
+          </div>
+        </div>
+      )}
+
+      {previewImageUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4"
+          onClick={() => setPreviewImageUrl(null)}
+        >
+          <div
+            className="relative max-h-[90vh] w-full max-w-3xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              onClick={() => setPreviewImageUrl(null)}
+              className="absolute right-2 top-2 z-10 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <img
+              src={previewImageUrl}
+              alt="Reference preview"
               className="h-full w-full rounded-lg object-contain"
             />
           </div>
