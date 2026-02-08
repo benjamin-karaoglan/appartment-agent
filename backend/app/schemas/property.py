@@ -19,6 +19,7 @@ class PropertyBase(BaseModel):
     rooms: Optional[int] = None
     property_type: Optional[str] = None
     floor: Optional[int] = None
+    building_floors: Optional[int] = None
     building_year: Optional[int] = None
 
 
@@ -32,11 +33,15 @@ class PropertyUpdate(BaseModel):
     """Schema for updating a property."""
 
     address: Optional[str] = None
+    postal_code: Optional[str] = None
+    city: Optional[str] = None
+    department: Optional[str] = None
     asking_price: Optional[float] = None
     surface_area: Optional[float] = None
     rooms: Optional[int] = None
     property_type: Optional[str] = None
     floor: Optional[int] = None
+    building_floors: Optional[int] = None
     building_year: Optional[int] = None
 
 

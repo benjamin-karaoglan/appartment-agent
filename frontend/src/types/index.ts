@@ -28,6 +28,7 @@ export interface Property {
   rooms?: number
   property_type?: string
   floor?: number
+  building_floors?: number
   building_year?: number
   estimated_value?: number
   price_per_sqm?: number

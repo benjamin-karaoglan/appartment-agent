@@ -42,6 +42,20 @@ function PropertyDetailContent() {
   const [editName, setEditName] = useState('');
   const [editingRoomType, setEditingRoomType] = useState(false);
   const [editRoomType, setEditRoomType] = useState('');
+  const [editingProperty, setEditingProperty] = useState(false);
+  const [savingProperty, setSavingProperty] = useState(false);
+  const [editForm, setEditForm] = useState({
+    address: '',
+    postal_code: '',
+    city: '',
+    property_type: '',
+    asking_price: '',
+    surface_area: '',
+    rooms: '',
+    floor: '',
+    building_floors: '',
+    building_year: '',
+  });
 
   const roomTypeOptions = ['living room', 'bedroom', 'kitchen', 'bathroom', 'dining room', 'home office'];
 
@@ -254,6 +268,53 @@ function PropertyDetailContent() {
     }
   };
 
+  const startEditingProperty = () => {
+    if (!property) return;
+    setEditForm({
+      address: property.address || '',
+      postal_code: property.postal_code || '',
+      city: property.city || '',
+      property_type: property.property_type || '',
+      asking_price: property.asking_price != null ? String(property.asking_price) : '',
+      surface_area: property.surface_area != null ? String(property.surface_area) : '',
+      rooms: property.rooms != null ? String(property.rooms) : '',
+      floor: property.floor != null ? String(property.floor) : '',
+      building_floors: property.building_floors != null ? String(property.building_floors) : '',
+      building_year: property.building_year != null ? String(property.building_year) : '',
+    });
+    setEditingProperty(true);
+  };
+
+  const cancelEditingProperty = () => {
+    setEditingProperty(false);
+  };
+
+  const saveProperty = async () => {
+    setSavingProperty(true);
+    try {
+      const payload: Record<string, any> = {
+        address: editForm.address || null,
+        postal_code: editForm.postal_code || null,
+        city: editForm.city || null,
+        property_type: editForm.property_type || null,
+        asking_price: editForm.asking_price ? parseFloat(editForm.asking_price) : null,
+        surface_area: editForm.surface_area ? parseFloat(editForm.surface_area) : null,
+        rooms: editForm.rooms ? parseInt(editForm.rooms, 10) : null,
+        floor: editForm.floor !== '' ? parseInt(editForm.floor, 10) : null,
+        building_floors: editForm.building_floors ? parseInt(editForm.building_floors, 10) : null,
+        building_year: editForm.building_year ? parseInt(editForm.building_year, 10) : null,
+      };
+      const response = await api.put(`/api/properties/${propertyId}`, payload);
+      setProperty(response.data);
+      setEditingProperty(false);
+    } catch (err) {
+      console.error('Failed to save property:', err);
+      setError(t('info.saveFailed'));
+    } finally {
+      setSavingProperty(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -318,61 +379,205 @@ function PropertyDetailContent() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 mb-8">
             {/* Property Info Card */}
             <div className="bg-white shadow rounded-lg p-6 lg:col-span-2">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">{t('info.title')}</h2>
-              <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-                {property.property_type && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.type')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{property.property_type}</dd>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium text-gray-900">{t('info.title')}</h2>
+                {editingProperty ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={saveProperty}
+                      disabled={savingProperty}
+                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {savingProperty ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                      <span className="ml-1.5">{t('info.save')}</span>
+                    </button>
+                    <button
+                      onClick={cancelEditingProperty}
+                      disabled={savingProperty}
+                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <X className="h-4 w-4" />
+                      <span className="ml-1.5">{t('info.cancel')}</span>
+                    </button>
                   </div>
+                ) : (
+                  <button
+                    onClick={startEditingProperty}
+                    className="inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                    title={t('info.edit')}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
                 )}
-                {property.asking_price && (
+              </div>
+
+              {editingProperty ? (
+                <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.askingPrice')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900 font-semibold">
-                      {new Intl.NumberFormat('fr-FR', {
-                        style: 'currency',
-                        currency: 'EUR',
-                      }).format(property.asking_price)}
-                    </dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.address')}</label>
+                    <input
+                      type="text"
+                      value={editForm.address}
+                      onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                )}
-                {property.surface_area && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.surfaceArea')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{property.surface_area} m²</dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.postalCode')}</label>
+                    <input
+                      type="text"
+                      value={editForm.postal_code}
+                      onChange={(e) => setEditForm({ ...editForm, postal_code: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                )}
-                {property.rooms && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.rooms')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{property.rooms} pièces</dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.city')}</label>
+                    <input
+                      type="text"
+                      value={editForm.city}
+                      onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                )}
-                {property.floor !== null && property.floor !== undefined && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.floor')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{property.floor}</dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.type')}</label>
+                    <select
+                      value={editForm.property_type}
+                      onChange={(e) => setEditForm({ ...editForm, property_type: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">{t('info.selectType')}</option>
+                      <option value="Appartement">{t('info.appartement')}</option>
+                      <option value="Maison">{t('info.maison')}</option>
+                    </select>
                   </div>
-                )}
-                {property.building_year && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.buildingYear')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{property.building_year}</dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.askingPrice')}</label>
+                    <input
+                      type="number"
+                      value={editForm.asking_price}
+                      onChange={(e) => setEditForm({ ...editForm, asking_price: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                )}
-                {property.price_per_sqm && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.pricePerSqm')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">
-                      {new Intl.NumberFormat('fr-FR', {
-                        style: 'currency',
-                        currency: 'EUR',
-                      }).format(property.price_per_sqm)}
-                    </dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.surfaceArea')}</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editForm.surface_area}
+                      onChange={(e) => setEditForm({ ...editForm, surface_area: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                )}
-              </dl>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.rooms')}</label>
+                    <input
+                      type="number"
+                      value={editForm.rooms}
+                      onChange={(e) => setEditForm({ ...editForm, rooms: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.floor')}</label>
+                    <input
+                      type="number"
+                      value={editForm.floor}
+                      onChange={(e) => setEditForm({ ...editForm, floor: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      {editForm.property_type === 'Maison' ? t('info.buildingFloorsHouse') : t('info.buildingFloors')}
+                    </label>
+                    <input
+                      type="number"
+                      value={editForm.building_floors}
+                      onChange={(e) => setEditForm({ ...editForm, building_floors: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.buildingYear')}</label>
+                    <input
+                      type="number"
+                      value={editForm.building_year}
+                      onChange={(e) => setEditForm({ ...editForm, building_year: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                  {property.property_type && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.type')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.property_type}</dd>
+                    </div>
+                  )}
+                  {property.asking_price && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.askingPrice')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900 font-semibold">
+                        {new Intl.NumberFormat('fr-FR', {
+                          style: 'currency',
+                          currency: 'EUR',
+                        }).format(property.asking_price)}
+                      </dd>
+                    </div>
+                  )}
+                  {property.surface_area && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.surfaceArea')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.surface_area} m²</dd>
+                    </div>
+                  )}
+                  {property.rooms && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.rooms')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.rooms} pièces</dd>
+                    </div>
+                  )}
+                  {property.floor !== null && property.floor !== undefined && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.floor')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.floor}</dd>
+                    </div>
+                  )}
+                  {property.building_floors != null && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">
+                        {property.property_type === 'Maison' ? t('info.buildingFloorsHouse') : t('info.buildingFloors')}
+                      </dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.building_floors}</dd>
+                    </div>
+                  )}
+                  {property.building_year && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.buildingYear')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.building_year}</dd>
+                    </div>
+                  )}
+                  {property.price_per_sqm && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.pricePerSqm')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">
+                        {new Intl.NumberFormat('fr-FR', {
+                          style: 'currency',
+                          currency: 'EUR',
+                        }).format(property.price_per_sqm)}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              )}
             </div>
 
             {/* Market Analysis Card */}

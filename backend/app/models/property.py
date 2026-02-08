@@ -42,6 +42,7 @@ class Property(Base):
     rooms = Column(Integer)
     property_type = Column(String)  # Appartement, Maison, etc.
     floor = Column(Integer)
+    building_floors = Column(Integer)  # Total floors in building (apt) or house
     building_year = Column(Integer)
 
     # Analysis results
