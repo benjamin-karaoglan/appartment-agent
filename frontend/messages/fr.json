@@ -145,7 +145,14 @@
       "deleteTitle": "Supprimer le bien",
       "deleteMessage": "Êtes-vous sûr de vouloir supprimer ce bien ? Cette action est irréversible. Tous les documents, analyses et photos associés seront définitivement supprimés.",
       "deleteFailed": "Échec de la suppression du bien. Veuillez réessayer.",
-      "deleteTooltip": "Supprimer le bien"
+      "deleteTooltip": "Supprimer le bien",
+      "risk": {
+        "low": "Risque faible",
+        "medium": "Risque moyen",
+        "high": "Risque élevé"
+      },
+      "annualCost": "Coûts annuels",
+      "documents": "{count, plural, one {# document} other {# documents}}"
     }
   },
   "propertyForm": {
@@ -173,6 +180,8 @@
       "surfaceArea": "Surface (m²)",
       "rooms": "Nombre de pièces",
       "floor": "Étage",
+      "buildingFloors": "Étages de l'immeuble",
+      "buildingFloorsHouse": "Étages",
       "buildingYear": "Année de construction"
     },
     "submit": "Créer le bien",
@@ -185,11 +194,24 @@
     "loadFailed": "Échec du chargement des détails du bien",
     "info": {
       "title": "Informations sur le bien",
+      "edit": "Modifier",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "saveFailed": "Erreur lors de la sauvegarde",
+      "address": "Adresse",
+      "postalCode": "Code postal",
+      "city": "Ville",
+      "department": "Département",
       "type": "Type",
+      "selectType": "Sélectionner",
+      "appartement": "Appartement",
+      "maison": "Maison",
       "askingPrice": "Prix demandé",
       "surfaceArea": "Surface",
       "rooms": "Pièces",
       "floor": "Étage",
+      "buildingFloors": "Étages de l'immeuble",
+      "buildingFloorsHouse": "Étages",
       "buildingYear": "Année de construction",
       "pricePerSqm": "Prix au m²"
     },
@@ -200,6 +222,7 @@
       "analyzing": "Analyse en cours...",
       "manageDocuments": "Gérer les documents",
       "redesignStudio": "Studio de redesign d'appartement",
+      "toolsTitle": "Outils du bien",
       "simpleTooltip": {
         "title": "Analyse simple",
         "whatItDoes": "Affiche uniquement les ventes à la même adresse exacte (même immeuble).",
@@ -282,6 +305,30 @@
       "totalChange": "Variation totale :",
       "totalSalesAnalyzed": "Total des ventes analysées :"
     },
+    "aiAnalysis": {
+      "title": "Analyse IA du bien",
+      "noData": "Aucun document analysé pour l'instant",
+      "viewDocuments": "Télécharger et analyser des documents",
+      "riskLevel": "Niveau de risque",
+      "summary": "Résumé",
+      "keyFindings": "Points clés",
+      "recommendations": "Recommandations",
+      "annualCosts": "Coûts annuels",
+      "oneTimeCosts": "Coûts ponctuels",
+      "showMore": "Voir l'analyse complète",
+      "showLess": "Masquer les détails"
+    },
+    "designOverview": {
+      "title": "Aperçu Design Appartement",
+      "openStudio": "Ouvrir le Studio de Redesign",
+      "noRedesigns": "Aucun redesign promu",
+      "goToStudio": "Accédez au studio de redesign pour créer et promouvoir des designs",
+      "noRoomType": "Pièce",
+      "showOriginal": "Voir l'original",
+      "showRedesign": "Voir le redesign",
+      "prompt": "Prompt",
+      "goToStudioAction": "Aller au Studio de Redesign"
+    },
     "deleteTitle": "Supprimer le bien",
     "deleteMessage": "Êtes-vous sûr de vouloir supprimer ce bien ? Cette action est irréversible. Tous les documents, analyses et photos associés seront définitivement supprimés.",
     "analyzeFailed": "Échec de l'analyse de prix",
@@ -301,12 +348,19 @@
       "autoClassification": "Auto-classification",
       "parallelProcessing": "Traitement parallèle",
       "smartSynthesis": "Synthèse intelligente",
-      "processing": "Traitement des documents",
-      "processingSubtitle": "L'agent IA classifie et analyse vos documents...",
+      "stepUpload": "Envoi",
+      "stepAnalysis": "Analyse IA",
+      "stepSynthesis": "Synthèse",
+      "uploading": "Envoi des fichiers",
+      "uploadingSubtitle": "Envoi de {count} fichiers vers le serveur...",
+      "processing": "Analyse en cours",
+      "processingSubtitle": "L'agent IA classifie et analyse vos documents en parallèle...",
       "complete": "{completed} / {total} terminés",
       "processingComplete": "Traitement terminé !",
       "documentsAnalyzed": "{count} documents analysés avec succès",
-      "uploadMore": "Télécharger d'autres documents"
+      "uploadMore": "Télécharger d'autres documents",
+      "synthesizing": "Génération de la synthèse",
+      "synthesizingSubtitle": "L'IA croise les données de tous les documents pour générer une analyse globale..."
     },
     "synthesis": {
       "title": "Synthèse IA",
@@ -323,14 +377,67 @@
       "title": "Analyse IA du bien",
       "risk": "Risque : {level}",
       "keyFindings": "Points clés",
-      "recommendations": "Recommandations"
+      "recommendations": "Recommandations",
+      "confidence": "Confiance : {score}%",
+      "confidenceNote": "Note de confiance",
+      "annualBreakdown": "Détail des coûts annuels",
+      "oneTimeBreakdown": "Détail des coûts ponctuels",
+      "crossDocThemes": "Thèmes inter-documents",
+      "actionItems": "Actions à mener",
+      "riskFactors": "Facteurs de risque",
+      "tantiemes": "Tantièmes",
+      "lotTantiemes": "Tantièmes du lot",
+      "totalTantiemes": "Total tantièmes",
+      "sharePercentage": "Quote-part",
+      "description": "Description",
+      "amount": "Montant",
+      "source": "Source",
+      "status": "Statut",
+      "costCategories": {
+        "charges_copropriete": "Charges de copropriété",
+        "taxe_fonciere": "Taxe foncière",
+        "estimated_energy": "Énergie estimée",
+        "fonds_travaux": "Fonds travaux",
+        "other_recurring": "Autres récurrents"
+      },
+      "costStatus": {
+        "voted": "Voté",
+        "estimated": "Estimé",
+        "upcoming": "À venir"
+      },
+      "urgency": {
+        "immediate": "Immédiat",
+        "short_term": "Court terme",
+        "medium_term": "Moyen terme"
+      },
+      "priority": "Priorité",
+      "estimatedCost": "Coût estimé",
+      "documentsInvolved": "Documents concernés",
+      "evolution": "Évolution",
+      "currentStatus": "Statut actuel",
+      "theme": "Thème",
+      "editTantiemes": "Modifier les tantièmes",
+      "notDetected": "Non détecté",
+      "notAvailable": "N/D",
+      "tantiemesHint": "Renseignez vos tantièmes de lot et le total de l'immeuble pour calculer votre quote-part des charges de copropriété.",
+      "coproCost": "Charge copro",
+      "coproTotal": "Total copro",
+      "yourShare": "Votre part",
+      "coproTotalLabel": "Total copro",
+      "category": "Catégorie",
+      "directCost": "Charge directe",
+      "editAmount": "Modifier le montant",
+      "userAdjusted": "Ajusté",
+      "annualTotal": "Total annuel",
+      "oneTimeTotal": "Total ponctuel"
     },
     "manualUpload": "Ou téléchargez manuellement par catégorie",
     "categories": {
       "pv_ag": { "label": "PV d'AG", "description": "Procès-verbaux d'assemblée générale" },
       "diags": { "label": "Diagnostics", "description": "Documents de diagnostic" },
       "taxe_fonciere": { "label": "Taxe Foncière", "description": "Documents de taxe foncière" },
-      "charges": { "label": "Charges", "description": "Charges de copropriété" }
+      "charges": { "label": "Charges", "description": "Charges de copropriété" },
+      "other": { "label": "Autres", "description": "Autres documents immobiliers" }
     },
     "documentCount": "{count, plural, one {# document} other {# documents}}",
     "uploadDocuments": "Télécharger des documents",
@@ -353,7 +460,24 @@
     "noDocuments": "Aucun document téléchargé",
     "bulkFailed": "Le traitement en lot a échoué. Vérifiez les erreurs de chaque document.",
     "processingTimeout": "Le traitement prend plus de temps que prévu. Veuillez vérifier plus tard.",
-    "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce document ?"
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce document ?",
+    "rename": "Renommer",
+    "renameDocument": "Renommer le document",
+    "selectAll": "Tout sélectionner",
+    "deselectAll": "Tout désélectionner",
+    "deleteSelected": "Supprimer la sélection",
+    "selectedCount": "{count, plural, one {# sélectionné} other {# sélectionnés}}",
+    "bulkDeleteTitle": "Supprimer les documents",
+    "bulkDeleteMessage": "Êtes-vous sûr de vouloir supprimer {count, plural, one {# document} other {# documents}} ? Cette action est irréversible.",
+    "documentList": {
+      "title": "Documents",
+      "expandDetails": "Voir les détails",
+      "collapseDetails": "Masquer les détails",
+      "resynthesize": "Régénérer la synthèse",
+      "resynthesizing": "Régénération...",
+      "noAnalysis": "Analyse en attente",
+      "emptyState": "Téléchargez des documents via la zone d'upload ci-dessus"
+    }
   },
   "photos": {
     "backToProperty": "Retour au bien",
@@ -415,7 +539,13 @@
     },
     "thread": "Fil",
     "custom": "Personnalisé",
-    "imageError": "Erreur d'image"
+    "imageError": "Erreur d'image",
+    "promoteRedesign": "Promouvoir sur l'aperçu du bien",
+    "demoteRedesign": "Retirer de l'aperçu du bien",
+    "promoted": "Promu",
+    "redesignPromoted": "Redesign promu sur l'aperçu du bien",
+    "redesignDemoted": "Redesign retiré de l'aperçu du bien",
+    "promoteFailed": "Échec de la mise à jour du redesign promu"
   },
   "properties": {
     "title": "Mes biens",

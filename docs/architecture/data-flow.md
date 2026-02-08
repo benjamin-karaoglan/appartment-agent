@@ -4,7 +4,7 @@ This document describes how data flows through the AppArt Agent system for key o
 
 ## Document Upload and Analysis
 
-The bulk document upload flow demonstrates the async processing architecture:
+The bulk document upload flow demonstrates the multi-phase async processing architecture. The frontend tracks three distinct phases: Upload, Analysis, and Synthesis.
 
 ```mermaid
 sequenceDiagram
@@ -16,32 +16,37 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     rect rgb(230, 245, 255)
-        Note over User,BE: Upload Phase
+        Note over User,BE: Phase 1 - Upload
         User->>FE: 1. Select files (drag & drop)
-        FE->>BE: 2. POST /documents/bulk-upload
-        BE->>Store: 3. Store files with SHA-256 hash
-        BE->>DB: 4. Create document records
-        BE-->>FE: 5. Return workflow_id
-        FE-->>User: 6. Show progress spinner
+        FE->>FE: 2. Show upload progress indicator
+        FE->>BE: 3. POST /documents/bulk-upload
+        BE->>Store: 4. Store files with SHA-256 hash
+        BE->>DB: 5. Create document records
+        BE-->>FE: 6. Return workflow_id
     end
 
     rect rgb(255, 245, 230)
-        Note over BE,AI: AI Processing Phase
-        BE->>Store: 7. Fetch first page of each doc
-        BE->>AI: 8. Classify documents (batch)
-        AI-->>BE: 9. Document types & confidence
-        BE->>AI: 10. Parallel analysis (type-specific prompts)
+        Note over BE,AI: Phase 2 - Analysis (background thread)
+        BE->>BE: 7. Prepare PDFs (extract text + metadata)
+        BE->>AI: 8. Classify via native PDF input
+        AI-->>BE: 9. Document types (5 categories)
+        BE->>AI: 10. Parallel analysis with thinking enabled
         AI-->>BE: 11. Structured analysis results
-        BE->>AI: 12. Cross-document synthesis
-        AI-->>BE: 13. Aggregated insights
-        BE->>DB: 14. Save all results
+        BE->>DB: 12. Save per-document results
+    end
+
+    rect rgb(255, 230, 255)
+        Note over BE,AI: Phase 3 - Synthesis
+        BE->>AI: 13. Cross-document synthesis
+        AI-->>BE: 14. Costs, risks, tantiemes, themes, action items
+        BE->>DB: 15. Save synthesis (preserve user overrides)
     end
 
     rect rgb(230, 255, 230)
-        Note over User,FE: Results Phase
-        FE->>BE: 15. Poll GET /documents/workflow/{id}
-        BE-->>FE: 16. Status: complete + results
-        FE-->>User: 17. Display analysis dashboard
+        Note over User,FE: Results
+        FE->>BE: 16. Poll GET /documents/bulk-status/{id}
+        BE-->>FE: 17. Status: complete + results
+        FE-->>User: 18. Display analysis with expandable breakdowns
     end
 ```
 
@@ -59,47 +64,67 @@ flowchart LR
         D["MinIO/GCS<br/>Object Store"]
     end
 
-    subgraph Classification["3. Classification"]
-        E["Extract<br/>First Page"]
-        F["Gemini<br/>Vision API"]
-        G["Document<br/>Type"]
+    subgraph Preparation["3. PDF Preparation"]
+        E["Extract text<br/>(PyMuPDF)"]
+        F["Gather metadata<br/>(pages, size)"]
     end
 
-    subgraph Analysis["4. Analysis"]
-        H["Type-specific<br/>Prompts"]
-        I["Parallel<br/>Processing"]
-        J["Structured<br/>JSON Results"]
+    subgraph Classification["4. Classification"]
+        G["Native PDF<br/>to Gemini"]
+        H["Document<br/>Category"]
     end
 
-    subgraph Synthesis["5. Synthesis"]
-        K["Aggregate<br/>Costs"]
-        L["Risk<br/>Assessment"]
-        M["Recommendations"]
+    subgraph Analysis["5. Analysis"]
+        I["Type-specific<br/>Prompts + Thinking"]
+        J["Parallel via<br/>asyncio.gather()"]
+        K["Structured<br/>JSON Results"]
+    end
+
+    subgraph Synthesis["6. Synthesis"]
+        L["Cost Breakdown<br/>(annual + one-time)"]
+        M["Tantiemes<br/>Calculation"]
+        N["Cross-doc Themes<br/>+ Action Items"]
+        O["Risk Assessment<br/>+ Confidence Score"]
     end
 
     A --> B --> C --> D
-    D --> E --> F --> G
-    G --> H --> I --> J
-    J --> K --> L --> M
+    D --> E --> F
+    F --> G --> H
+    H --> I --> J --> K
+    K --> L --> M --> N --> O
 ```
 
 ### Document Type Detection
 
+Documents are classified into 5 categories using native PDF input to Gemini:
+
 ```mermaid
 flowchart TD
-    Input["Document Image<br/>(First Page)"]
+    Input["Native PDF<br/>(sent directly to Gemini)"]
 
-    Input --> Gemini["Gemini Vision Analysis"]
+    Input --> Gemini["Gemini Classification"]
 
-    Gemini --> PV["PV d'AG<br/>Assembly minutes"]
-    Gemini --> DPE["DPE<br/>Energy performance"]
-    Gemini --> Amiante["Diagnostic Amiante<br/>Asbestos report"]
-    Gemini --> Plomb["Diagnostic Plomb<br/>Lead report"]
-    Gemini --> Elec["Diagnostic Électrique<br/>Electrical inspection"]
-    Gemini --> Gas["Diagnostic Gaz<br/>Gas inspection"]
-    Gemini --> Tax["Taxe Foncière<br/>Property tax"]
-    Gemini --> Charges["Charges<br/>Condo fees"]
-    Gemini --> Other["Other<br/>Unknown type"]
+    Gemini --> PV["pv_ag<br/>Assembly minutes"]
+    Gemini --> Diags["diags<br/>DPE, amiante, plomb,<br/>electric, gas, etc."]
+    Gemini --> Tax["taxe_fonciere<br/>Property tax"]
+    Gemini --> Charges["charges<br/>Copropriete fees"]
+    Gemini --> Other["other<br/>Rules, contracts,<br/>insurance, etc."]
+```
+
+### Synthesis Regeneration
+
+Synthesis is automatically regenerated when documents are added or removed. It can also be manually triggered. User overrides (tantiemes, cost adjustments) are preserved across regenerations.
+
+```mermaid
+flowchart TD
+    Trigger["Trigger:<br/>Upload / Delete / Manual"]
+    Trigger --> Fetch["Fetch all analyzed<br/>documents for property"]
+    Fetch --> Check{"Any analyzed<br/>documents?"}
+    Check -->|No| Clear["Clear synthesis"]
+    Check -->|Yes| LoadOverrides["Load existing<br/>user overrides"]
+    LoadOverrides --> Synthesize["Run AI synthesis<br/>with all document summaries"]
+    Synthesize --> Merge["Merge user overrides<br/>into synthesis_data"]
+    Merge --> Save["Save to DocumentSummary"]
 ```
 
 ## Price Analysis Flow
@@ -215,6 +240,15 @@ sequenceDiagram
         FE->>Store: 15. Fetch via presigned URL
         Store-->>FE: 16. Image bytes
         FE-->>User: 17. Display side-by-side comparison
+    end
+
+    rect rgb(255, 255, 230)
+        Note over User,BE: Promote Phase (optional)
+        User->>FE: 18. Click "Promote" on a redesign
+        FE->>BE: 19. PATCH /photos/{id}/promote/{redesign_id}
+        BE->>DB: 20. Set photo.promoted_redesign_id
+        BE-->>FE: 21. Updated photo with promoted_redesign
+        FE-->>User: 22. Show promoted badge + display on property overview
     end
 ```
 

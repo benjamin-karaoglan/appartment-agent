@@ -4,7 +4,7 @@ Services package - Business logic and integrations.
 Structure:
 - app.services.ai - AI services (document analysis, image generation, processing)
 - app.services.documents - Document parsing and bulk processing
-- app.services.storage - S3-compatible storage (MinIO)
+- app.services.storage - Object storage (MinIO/GCS/S3)
 - app.services.price_analysis - DVF price analysis
 - app.services.dvf_service - DVF service (original implementation)
 """
@@ -63,10 +63,6 @@ DocumentParsingService = DocumentParser
 AsyncDocumentProcessor = BulkProcessor
 get_async_processor = get_bulk_processor
 
-# Old storage names
-MinIOService = StorageService
-get_minio_service = get_storage_service
-
 # Old DVF names
 get_dvf_service = get_price_analyzer
 
@@ -101,7 +97,5 @@ __all__ = [
     "DocumentParsingService",
     "AsyncDocumentProcessor",
     "get_async_processor",
-    "MinIOService",
-    "get_minio_service",
     "get_dvf_service",
 ]

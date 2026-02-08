@@ -25,9 +25,8 @@ class Photo(Base):
 
     # Original photo
     filename = Column(String, nullable=False)
-    # Storage-agnostic fields (column names kept as minio_* for backward compatibility)
-    storage_key = Column("minio_key", String, nullable=False)  # Path in storage
-    storage_bucket = Column("minio_bucket", String, default="photos")  # Bucket name
+    storage_key = Column(String, nullable=False)
+    storage_bucket = Column(String, default="photos")
     file_size = Column(Integer)
     mime_type = Column(String)
 
@@ -36,9 +35,18 @@ class Photo(Base):
     description = Column(Text, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
+    # Promoted redesign for property overview
+    promoted_redesign_id = Column(Integer, ForeignKey("photo_redesigns.id"), nullable=True)
+
     # Relationships
     redesigns = relationship(
-        "PhotoRedesign", back_populates="original_photo", cascade="all, delete-orphan"
+        "PhotoRedesign",
+        back_populates="original_photo",
+        cascade="all, delete-orphan",
+        foreign_keys="[PhotoRedesign.photo_id]",
+    )
+    promoted_redesign = relationship(
+        "PhotoRedesign", uselist=False, foreign_keys=[promoted_redesign_id]
     )
 
     def __repr__(self):
@@ -56,9 +64,9 @@ class PhotoRedesign(Base):
     )
     photo_id = Column(Integer, ForeignKey("photos.id"), nullable=False)
 
-    # Generated image - storage-agnostic fields (column names kept as minio_* for backward compatibility)
-    storage_key = Column("minio_key", String, nullable=False)  # Path in storage
-    storage_bucket = Column("minio_bucket", String, default="photos")  # Bucket name
+    # Generated image
+    storage_key = Column(String, nullable=False)
+    storage_bucket = Column(String, default="photos")
     file_size = Column(Integer)
 
     # Generation parameters
@@ -81,7 +89,7 @@ class PhotoRedesign(Base):
     user_rating = Column(Integer, nullable=True)  # 1-5 stars
 
     # Relationships
-    original_photo = relationship("Photo", back_populates="redesigns")
+    original_photo = relationship("Photo", back_populates="redesigns", foreign_keys=[photo_id])
     parent_redesign = relationship("PhotoRedesign", remote_side=[id], backref="iterations")
 
     def __repr__(self):

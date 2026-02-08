@@ -179,6 +179,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "fr": "Échec du téléchargement du document : {error}",
         "en": "Failed to upload document: {error}",
     },
+    "filename_cannot_be_empty": {
+        "fr": "Le nom du fichier ne peut pas être vide",
+        "en": "Filename cannot be empty",
+    },
+    "no_documents_to_delete": {
+        "fr": "Aucun document à supprimer",
+        "en": "No documents to delete",
+    },
     # ── Photos ────────────────────────────────────────────────────────────
     "file_must_be_image": {
         "fr": "Le fichier doit être une image (JPEG, JPG, PNG ou WebP)",
@@ -195,6 +203,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "photo_not_found": {
         "fr": "Photo non trouvée",
         "en": "Photo not found",
+    },
+    "redesign_not_found": {
+        "fr": "Redesign non trouvé",
+        "en": "Redesign not found",
     },
     "failed_generate_redesign": {
         "fr": "Échec de la génération du redesign : {error}",

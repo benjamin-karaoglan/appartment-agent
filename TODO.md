@@ -1,31 +1,27 @@
 ## TODO
 
+### Pricing
+
+#### Features
+
+- Switch to only trend analysis (revise name)
+- Improve the pricing tool (take floors) &rarr; Show dislcaimers mentionning exposition and other parameters are variables
+
 ### Dashboard
 
-- [ ] Enable to get an overview of property: State, price, photos
+- [X] Enable to get an overview of property: State, price, photos
 
 ### Documents
 
-#### Bugs
-
-- [X] Loading bar disapering
-- [X] Bulk Load failing
-
 #### Feature
 
-- [ ] Smart summary &rarr; enable to recreate
-- [ ] Rethink the whole functionality
+- [ ] Tantième detection
 
 ### Redesign studio
 
-#### Bugs
-
-- [ ] Uploading an image while running a redesign
-- [ ] Switching while running a redesign
-
 #### Feature
 
-- [X] Multiturn redesign
+- [ ] Add new prompts
 
 ### Infrastructure
 
@@ -34,5 +30,6 @@
 
 ### Various
 
-- [ ] Update email to use gmail workspace domain
 - [ ] Add demos (gif) + images (assets)
+- [ ] Revise the overall design (colors / typos)
+- [ ] Add feature to export to pdf 'compte rendu' of property

@@ -27,6 +27,20 @@ class PhotoUpdate(BaseModel):
     filename: Optional[str] = Field(None, description="Display name for the photo")
 
 
+class PromotedRedesignResponse(BaseModel):
+    """Schema for the promoted redesign shown on property overview."""
+
+    id: int
+    redesign_uuid: str
+    style_preset: Optional[str] = None
+    prompt: Optional[str] = None
+    presigned_url: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class PhotoResponse(BaseModel):
     """Schema for photo response."""
 
@@ -44,6 +58,7 @@ class PhotoResponse(BaseModel):
     uploaded_at: datetime
     presigned_url: Optional[str] = Field(None, description="Temporary URL to access the photo")
     redesign_count: int = Field(0, description="Number of redesigns created from this photo")
+    promoted_redesign: Optional[PromotedRedesignResponse] = None
 
     class Config:
         from_attributes = True

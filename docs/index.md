@@ -10,21 +10,21 @@ AppArt Agent helps buyers make informed real estate decisions by combining Frenc
 flowchart LR
     subgraph Input["Your Input"]
         Address["Property Address"]
-        Docs["Documents<br/>(PV AG, Diagnostics)"]
+        Docs["Documents<br/>(PV AG, Diagnostics,<br/>Tax, Charges, Other)"]
         Photos["Apartment Photos"]
     end
 
     subgraph AI["AI Analysis"]
         DVF["Price Analysis<br/>5.4M+ transactions"]
-        DocAI["Document Analysis<br/>Auto-classification"]
+        DocAI["Document Analysis<br/>Native PDF + Thinking"]
         PhotoAI["Photo Redesign<br/>Style visualization"]
     end
 
     subgraph Output["Decision Support"]
         Price["Market Valuation"]
-        Risks["Risk Assessment"]
-        Costs["Cost Breakdown"]
-        Visual["Renovation Preview"]
+        Risks["Risk Assessment<br/>+ Confidence Score"]
+        Costs["Cost Breakdown<br/>+ Tantiemes"]
+        Visual["Renovation Preview<br/>+ Promoted Redesigns"]
     end
 
     Address --> DVF --> Price
@@ -41,19 +41,19 @@ Access 5.4M+ French property transactions from DVF data to understand market pri
 
 ### Document Analysis
 
-Upload PV d'AG, diagnostics, tax documents - AI automatically classifies, analyzes, and synthesizes findings.
+Upload PV d'AG, diagnostics, tax documents, charges, and other property documents (rules, contracts, insurance). AI automatically classifies, analyzes with native PDF processing and reasoning, and produces a cross-document synthesis with cost breakdowns, tantiemes calculation, risk factors, and buyer action items.
 
 [Learn more →](backend/ai-services.md)
 
 ### Photo Redesign
 
-Visualize renovation potential with AI-powered style transformation of apartment photos.
+Visualize renovation potential with AI-powered style transformation of apartment photos. Promote your favorite redesign to feature it on the property overview.
 
 [Learn more →](backend/ai-services.md#image-generator)
 
 ### Decision Dashboard
 
-Comprehensive cost breakdown, investment analysis, and risk assessment scoring.
+Property overview with AI synthesis summary, risk level badges, annual/one-time cost breakdowns, promoted redesign previews, and inline property editing.
 
 [Learn more →](frontend/pages.md)
 
@@ -86,15 +86,16 @@ flowchart TB
     end
 
     subgraph Frontend["Frontend - Next.js 14"]
-        Dashboard["Dashboard"]
-        Documents["Documents"]
-        Photos["Photo Studio"]
+        Dashboard["Dashboard<br/>+ Synthesis Preview"]
+        Documents["Documents<br/>+ Multi-phase Processing"]
+        Properties["Property Detail<br/>+ Inline Editing"]
+        Photos["Photo Studio<br/>+ Promoted Redesigns"]
     end
 
     subgraph Backend["Backend - FastAPI"]
         API["REST API"]
-        AIServices["AI Services"]
-        DocProcessing["Document Processing"]
+        AIServices["AI Services<br/>Native PDF + Thinking"]
+        DocProcessing["Document Processing<br/>+ Cross-doc Synthesis"]
     end
 
     subgraph DataLayer["Data Layer"]
@@ -113,6 +114,7 @@ flowchart TB
     AIServices --> Redis
     DocProcessing --> Storage
     AIServices --> Gemini
+    Properties --> API
 ```
 
 [Architecture details →](architecture/overview.md)

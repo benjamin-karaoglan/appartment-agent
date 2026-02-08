@@ -9,13 +9,14 @@ import Header from '@/components/Header';
 import InfoTooltip from '@/components/InfoTooltip';
 import MarketTrendChart from '@/components/MarketTrendChart';
 import { api } from '@/lib/api';
-import { ArrowLeft, TrendingUp, FileText, Upload, Loader2, Trash2, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, FileText, Upload, Loader2, Trash2, ChevronDown, ChevronUp, Building2, ShieldCheck, AlertTriangle, ShieldAlert, Sparkles, Paintbrush, Image as ImageIcon, X, Columns, Pencil, Check } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import type { Property } from '@/types';
 
 function PropertyDetailContent() {
   const t = useTranslations('property');
   const tc = useTranslations('common');
+  const tp = useTranslations('photos');
   const params = useParams();
   const router = useRouter();
   const propertyId = params.id as string;
@@ -31,9 +32,50 @@ function PropertyDetailContent() {
   const [excludedOutliers, setExcludedOutliers] = useState<Set<number>>(new Set());
   const [excludedNeighboringOutliers, setExcludedNeighboringOutliers] = useState<Set<number>>(new Set());
   const [expandedSales, setExpandedSales] = useState<Set<number>>(new Set());
+  const [synthesis, setSynthesis] = useState<any>(null);
+  const [synthesisLoading, setSynthesisLoading] = useState(true);
+  const [showFullAnalysis, setShowFullAnalysis] = useState(false);
+  const [designPhotos, setDesignPhotos] = useState<any[]>([]);
+  const [previewPhoto, setPreviewPhoto] = useState<any>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editingRoomType, setEditingRoomType] = useState(false);
+  const [editRoomType, setEditRoomType] = useState('');
+  const [editingProperty, setEditingProperty] = useState(false);
+  const [savingProperty, setSavingProperty] = useState(false);
+  const [editForm, setEditForm] = useState({
+    address: '',
+    postal_code: '',
+    city: '',
+    property_type: '',
+    asking_price: '',
+    surface_area: '',
+    rooms: '',
+    floor: '',
+    building_floors: '',
+    building_year: '',
+  });
+
+  const roomTypeOptions = ['living room', 'bedroom', 'kitchen', 'bathroom', 'dining room', 'home office'];
+
+  const handleUpdatePhoto = async (photoId: number, updates: { filename?: string; room_type?: string }) => {
+    try {
+      await api.patch(`/api/photos/${photoId}`, updates);
+      // Update local state
+      setDesignPhotos((prev) =>
+        prev.map((p) => p.id === photoId ? { ...p, ...updates } : p)
+      );
+      setPreviewPhoto((prev: any) => prev?.id === photoId ? { ...prev, ...updates } : prev);
+    } catch (error) {
+      console.error('Failed to update photo:', error);
+    }
+  };
 
   useEffect(() => {
     loadProperty();
+    loadSynthesis();
+    loadDesignPhotos();
   }, [propertyId]);
 
   const loadProperty = async () => {
@@ -45,6 +87,28 @@ function PropertyDetailContent() {
       setError(t('loadFailed'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSynthesis = async () => {
+    setSynthesisLoading(true);
+    try {
+      const response = await api.get(`/api/documents/synthesis/${propertyId}`);
+      setSynthesis(response.data);
+    } catch (error) {
+      console.error('Failed to load synthesis:', error);
+      setSynthesis(null);
+    } finally {
+      setSynthesisLoading(false);
+    }
+  };
+
+  const loadDesignPhotos = async () => {
+    try {
+      const response = await api.get(`/api/photos/?property_id=${propertyId}`);
+      setDesignPhotos(response.data.photos);
+    } catch (error) {
+      console.error('Failed to load design photos:', error);
     }
   };
 
@@ -204,6 +268,53 @@ function PropertyDetailContent() {
     }
   };
 
+  const startEditingProperty = () => {
+    if (!property) return;
+    setEditForm({
+      address: property.address || '',
+      postal_code: property.postal_code || '',
+      city: property.city || '',
+      property_type: property.property_type || '',
+      asking_price: property.asking_price != null ? String(property.asking_price) : '',
+      surface_area: property.surface_area != null ? String(property.surface_area) : '',
+      rooms: property.rooms != null ? String(property.rooms) : '',
+      floor: property.floor != null ? String(property.floor) : '',
+      building_floors: property.building_floors != null ? String(property.building_floors) : '',
+      building_year: property.building_year != null ? String(property.building_year) : '',
+    });
+    setEditingProperty(true);
+  };
+
+  const cancelEditingProperty = () => {
+    setEditingProperty(false);
+  };
+
+  const saveProperty = async () => {
+    setSavingProperty(true);
+    try {
+      const payload: Record<string, any> = {
+        address: editForm.address || null,
+        postal_code: editForm.postal_code || null,
+        city: editForm.city || null,
+        property_type: editForm.property_type || null,
+        asking_price: editForm.asking_price ? parseFloat(editForm.asking_price) : null,
+        surface_area: editForm.surface_area ? parseFloat(editForm.surface_area) : null,
+        rooms: editForm.rooms ? parseInt(editForm.rooms, 10) : null,
+        floor: editForm.floor !== '' ? parseInt(editForm.floor, 10) : null,
+        building_floors: editForm.building_floors ? parseInt(editForm.building_floors, 10) : null,
+        building_year: editForm.building_year ? parseInt(editForm.building_year, 10) : null,
+      };
+      const response = await api.put(`/api/properties/${propertyId}`, payload);
+      setProperty(response.data);
+      setEditingProperty(false);
+    } catch (err) {
+      console.error('Failed to save property:', err);
+      setError(t('info.saveFailed'));
+    } finally {
+      setSavingProperty(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -268,163 +379,665 @@ function PropertyDetailContent() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 mb-8">
             {/* Property Info Card */}
             <div className="bg-white shadow rounded-lg p-6 lg:col-span-2">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">{t('info.title')}</h2>
-              <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-                {property.property_type && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.type')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{property.property_type}</dd>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium text-gray-900">{t('info.title')}</h2>
+                {editingProperty ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={saveProperty}
+                      disabled={savingProperty}
+                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {savingProperty ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                      <span className="ml-1.5">{t('info.save')}</span>
+                    </button>
+                    <button
+                      onClick={cancelEditingProperty}
+                      disabled={savingProperty}
+                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <X className="h-4 w-4" />
+                      <span className="ml-1.5">{t('info.cancel')}</span>
+                    </button>
                   </div>
+                ) : (
+                  <button
+                    onClick={startEditingProperty}
+                    className="inline-flex items-center px-2.5 py-1.5 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                    title={t('info.edit')}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
                 )}
-                {property.asking_price && (
+              </div>
+
+              {editingProperty ? (
+                <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.askingPrice')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900 font-semibold">
-                      {new Intl.NumberFormat('fr-FR', {
-                        style: 'currency',
-                        currency: 'EUR',
-                      }).format(property.asking_price)}
-                    </dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.address')}</label>
+                    <input
+                      type="text"
+                      value={editForm.address}
+                      onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                )}
-                {property.surface_area && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.surfaceArea')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{property.surface_area} m²</dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.postalCode')}</label>
+                    <input
+                      type="text"
+                      value={editForm.postal_code}
+                      onChange={(e) => setEditForm({ ...editForm, postal_code: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                )}
-                {property.rooms && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.rooms')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{property.rooms} pièces</dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.city')}</label>
+                    <input
+                      type="text"
+                      value={editForm.city}
+                      onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                )}
-                {property.floor !== null && property.floor !== undefined && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.floor')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{property.floor}</dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.type')}</label>
+                    <select
+                      value={editForm.property_type}
+                      onChange={(e) => setEditForm({ ...editForm, property_type: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">{t('info.selectType')}</option>
+                      <option value="Appartement">{t('info.appartement')}</option>
+                      <option value="Maison">{t('info.maison')}</option>
+                    </select>
                   </div>
-                )}
-                {property.building_year && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.buildingYear')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{property.building_year}</dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.askingPrice')}</label>
+                    <input
+                      type="number"
+                      value={editForm.asking_price}
+                      onChange={(e) => setEditForm({ ...editForm, asking_price: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                )}
-                {property.price_per_sqm && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">{t('info.pricePerSqm')}</dt>
-                    <dd className="mt-1 text-sm text-gray-900">
-                      {new Intl.NumberFormat('fr-FR', {
-                        style: 'currency',
-                        currency: 'EUR',
-                      }).format(property.price_per_sqm)}
-                    </dd>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.surfaceArea')}</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editForm.surface_area}
+                      onChange={(e) => setEditForm({ ...editForm, surface_area: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                )}
-              </dl>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.rooms')}</label>
+                    <input
+                      type="number"
+                      value={editForm.rooms}
+                      onChange={(e) => setEditForm({ ...editForm, rooms: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.floor')}</label>
+                    <input
+                      type="number"
+                      value={editForm.floor}
+                      onChange={(e) => setEditForm({ ...editForm, floor: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      {editForm.property_type === 'Maison' ? t('info.buildingFloorsHouse') : t('info.buildingFloors')}
+                    </label>
+                    <input
+                      type="number"
+                      value={editForm.building_floors}
+                      onChange={(e) => setEditForm({ ...editForm, building_floors: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">{t('info.buildingYear')}</label>
+                    <input
+                      type="number"
+                      value={editForm.building_year}
+                      onChange={(e) => setEditForm({ ...editForm, building_year: e.target.value })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                  {property.property_type && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.type')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.property_type}</dd>
+                    </div>
+                  )}
+                  {property.asking_price && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.askingPrice')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900 font-semibold">
+                        {new Intl.NumberFormat('fr-FR', {
+                          style: 'currency',
+                          currency: 'EUR',
+                        }).format(property.asking_price)}
+                      </dd>
+                    </div>
+                  )}
+                  {property.surface_area && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.surfaceArea')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.surface_area} m²</dd>
+                    </div>
+                  )}
+                  {property.rooms && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.rooms')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.rooms} pièces</dd>
+                    </div>
+                  )}
+                  {property.floor !== null && property.floor !== undefined && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.floor')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.floor}</dd>
+                    </div>
+                  )}
+                  {property.building_floors != null && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">
+                        {property.property_type === 'Maison' ? t('info.buildingFloorsHouse') : t('info.buildingFloors')}
+                      </dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.building_floors}</dd>
+                    </div>
+                  )}
+                  {property.building_year && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.buildingYear')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{property.building_year}</dd>
+                    </div>
+                  )}
+                  {property.price_per_sqm && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">{t('info.pricePerSqm')}</dt>
+                      <dd className="mt-1 text-sm text-gray-900">
+                        {new Intl.NumberFormat('fr-FR', {
+                          style: 'currency',
+                          currency: 'EUR',
+                        }).format(property.price_per_sqm)}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              )}
             </div>
 
-            {/* Quick Actions Card */}
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">{t('analysis.title')}</h2>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => analyzePrice('simple')}
-                    disabled={analyzing || !property.asking_price || !property.surface_area}
-                    className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {analyzing ? (
-                      <>
-                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        {t('analysis.analyzing')}
-                      </>
-                    ) : (
-                      <>
-                        <TrendingUp className="h-5 w-5 mr-2" />
-                        {t('analysis.simpleAnalysis')}
-                      </>
-                    )}
-                  </button>
-                  <InfoTooltip
-                    title={t('analysis.simpleTooltip.title')}
-                    content={
-                      <div className="space-y-2">
-                        <p><strong>{t('analysis.simpleTooltip.whatItDoes')}</strong></p>
-                        <p><strong>{t('analysis.simpleTooltip.howItWorks')}</strong></p>
-                        <ul className="list-disc pl-4 space-y-1 text-xs">
-                          <li>{t('analysis.simpleTooltip.steps.findSales')}</li>
-                          <li>{t('analysis.simpleTooltip.steps.groupTransactions')}</li>
-                          <li>{t('analysis.simpleTooltip.steps.detectOutliers')}</li>
-                          <li>{t('analysis.simpleTooltip.steps.calculateAverage')}</li>
-                          <li>{t('analysis.simpleTooltip.steps.rawPrices')}</li>
-                        </ul>
-                        <p className="text-xs text-gray-600 mt-2">
-                          <strong>{t('analysis.simpleTooltip.bestFor')}</strong>
-                        </p>
-                      </div>
-                    }
-                  />
+            {/* Market Analysis Card */}
+            <div className="space-y-6">
+              <div className="bg-white shadow rounded-lg p-6">
+                <h2 className="text-lg font-medium text-gray-900 mb-4">{t('analysis.title')}</h2>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => analyzePrice('simple')}
+                      disabled={analyzing || !property.asking_price || !property.surface_area}
+                      className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {analyzing ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          {t('analysis.analyzing')}
+                        </>
+                      ) : (
+                        <>
+                          <TrendingUp className="h-5 w-5 mr-2" />
+                          {t('analysis.simpleAnalysis')}
+                        </>
+                      )}
+                    </button>
+                    <InfoTooltip
+                      title={t('analysis.simpleTooltip.title')}
+                      content={
+                        <div className="space-y-2">
+                          <p><strong>{t('analysis.simpleTooltip.whatItDoes')}</strong></p>
+                          <p><strong>{t('analysis.simpleTooltip.howItWorks')}</strong></p>
+                          <ul className="list-disc pl-4 space-y-1 text-xs">
+                            <li>{t('analysis.simpleTooltip.steps.findSales')}</li>
+                            <li>{t('analysis.simpleTooltip.steps.groupTransactions')}</li>
+                            <li>{t('analysis.simpleTooltip.steps.detectOutliers')}</li>
+                            <li>{t('analysis.simpleTooltip.steps.calculateAverage')}</li>
+                            <li>{t('analysis.simpleTooltip.steps.rawPrices')}</li>
+                          </ul>
+                          <p className="text-xs text-gray-600 mt-2">
+                            <strong>{t('analysis.simpleTooltip.bestFor')}</strong>
+                          </p>
+                        </div>
+                      }
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => analyzePrice('trend')}
+                      disabled={analyzing || !property.asking_price || !property.surface_area}
+                      className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-blue-600 text-sm font-medium rounded-md text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {analyzing ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          {t('analysis.analyzing')}
+                        </>
+                      ) : (
+                        <>
+                          <TrendingUp className="h-5 w-5 mr-2" />
+                          {t('analysis.trendAnalysis')}
+                        </>
+                      )}
+                    </button>
+                    <InfoTooltip
+                      title={t('analysis.trendTooltip.title')}
+                      content={
+                        <div className="space-y-2">
+                          <p><strong>{t('analysis.trendTooltip.whatItDoes')}</strong></p>
+                          <p><strong>{t('analysis.trendTooltip.howItWorks')}</strong></p>
+                          <ul className="list-disc pl-4 space-y-1 text-xs">
+                            <li>{t('analysis.trendTooltip.steps.takeSale')}</li>
+                            <li>{t('analysis.trendTooltip.steps.analyzeSales')}</li>
+                            <li>{t('analysis.trendTooltip.steps.calculateTrend')}</li>
+                            <li>{t('analysis.trendTooltip.steps.projectPrice')}</li>
+                            <li>{t('analysis.trendTooltip.steps.accountTime')}</li>
+                          </ul>
+                          <p className="text-xs text-gray-600 mt-2">
+                            <strong>{t('analysis.trendTooltip.bestFor')}</strong>
+                          </p>
+                        </div>
+                      }
+                    />
+                  </div>
                 </div>
+              </div>
 
-                <div className="flex items-center gap-2">
+              {/* Property Tools Card */}
+              <div className="bg-white shadow rounded-lg p-6">
+                <h2 className="text-lg font-medium text-gray-900 mb-4">{t('analysis.toolsTitle')}</h2>
+                <div className="space-y-3">
                   <button
-                    onClick={() => analyzePrice('trend')}
-                    disabled={analyzing || !property.asking_price || !property.surface_area}
-                    className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-blue-600 text-sm font-medium rounded-md text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => router.push(`/properties/${propertyId}/documents`)}
+                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   >
-                    {analyzing ? (
-                      <>
-                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        {t('analysis.analyzing')}
-                      </>
-                    ) : (
-                      <>
-                        <TrendingUp className="h-5 w-5 mr-2" />
-                        {t('analysis.trendAnalysis')}
-                      </>
-                    )}
+                    <FileText className="h-5 w-5 mr-2" />
+                    {t('analysis.manageDocuments')}
                   </button>
-                  <InfoTooltip
-                    title={t('analysis.trendTooltip.title')}
-                    content={
-                      <div className="space-y-2">
-                        <p><strong>{t('analysis.trendTooltip.whatItDoes')}</strong></p>
-                        <p><strong>{t('analysis.trendTooltip.howItWorks')}</strong></p>
-                        <ul className="list-disc pl-4 space-y-1 text-xs">
-                          <li>{t('analysis.trendTooltip.steps.takeSale')}</li>
-                          <li>{t('analysis.trendTooltip.steps.analyzeSales')}</li>
-                          <li>{t('analysis.trendTooltip.steps.calculateTrend')}</li>
-                          <li>{t('analysis.trendTooltip.steps.projectPrice')}</li>
-                          <li>{t('analysis.trendTooltip.steps.accountTime')}</li>
-                        </ul>
-                        <p className="text-xs text-gray-600 mt-2">
-                          <strong>{t('analysis.trendTooltip.bestFor')}</strong>
-                        </p>
-                      </div>
-                    }
-                  />
+
+                  <button
+                    onClick={() => router.push(`/properties/${propertyId}/redesign-studio`)}
+                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <Upload className="h-5 w-5 mr-2" />
+                    {t('analysis.redesignStudio')}
+                  </button>
                 </div>
-
-                <button
-                  onClick={() => router.push(`/properties/${propertyId}/documents`)}
-                  className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <FileText className="h-5 w-5 mr-2" />
-                  {t('analysis.manageDocuments')}
-                </button>
-
-                <button
-                  onClick={() => router.push(`/properties/${propertyId}/redesign-studio`)}
-                  className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <Upload className="h-5 w-5 mr-2" />
-                  {t('analysis.redesignStudio')}
-                </button>
               </div>
             </div>
           </div>
+
+          {/* AI Property Analysis Card */}
+          <div className="bg-white shadow rounded-lg p-6 mb-8">
+            <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+              <Sparkles className="h-5 w-5 mr-2 text-purple-500" />
+              {t('aiAnalysis.title')}
+            </h2>
+            {synthesisLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
+              </div>
+            ) : synthesis ? (() => {
+              const sd = synthesis.synthesis_data;
+              const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+              const DIRECT_KEYS = ['taxe_fonciere', 'estimated_energy'];
+
+              // Compute tantièmes-adjusted totals
+              const overrides = sd?.user_overrides;
+              const lotT = overrides?.lot_tantiemes ?? sd?.tantiemes_info?.lot_tantiemes ?? null;
+              const totalT = overrides?.total_tantiemes ?? sd?.tantiemes_info?.total_tantiemes ?? null;
+              const ratio = (lotT != null && totalT != null && totalT > 0) ? lotT / totalT : null;
+
+              const annualTotal = sd?.annual_cost_breakdown
+                ? Object.entries(sd.annual_cost_breakdown).reduce((sum: number, [key, value]: [string, any]) => {
+                    const amt = typeof value === 'number' ? value : (value?.amount ?? 0);
+                    const isDirect = DIRECT_KEYS.includes(key);
+                    return sum + ((!isDirect && ratio != null) ? amt * ratio : amt);
+                  }, 0)
+                : synthesis.total_annual_cost ?? 0;
+
+              const oneTimeTotal = sd?.one_time_cost_breakdown?.length
+                ? sd.one_time_cost_breakdown.reduce((sum: number, item: any) => {
+                    const isDirect = item.cost_type === 'direct';
+                    return sum + ((!isDirect && ratio != null) ? item.amount * ratio : item.amount);
+                  }, 0)
+                : synthesis.total_one_time_cost ?? 0;
+
+              return (
+              <div className="space-y-4">
+                {/* Metrics + Manage Documents */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-8">
+                    {/* Risk Level */}
+                    {synthesis.risk_level && (
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500 mb-1">{t('aiAnalysis.riskLevel')}</dt>
+                        <dd>
+                          <span className={`inline-flex items-center text-lg font-semibold px-3 py-0.5 rounded-full ${
+                            synthesis.risk_level === 'high' ? 'bg-red-100 text-red-700' :
+                            synthesis.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {synthesis.risk_level === 'high' ? (
+                              <ShieldAlert className="h-5 w-5 mr-1.5" />
+                            ) : synthesis.risk_level === 'medium' ? (
+                              <AlertTriangle className="h-5 w-5 mr-1.5" />
+                            ) : (
+                              <ShieldCheck className="h-5 w-5 mr-1.5" />
+                            )}
+                            {synthesis.risk_level.toUpperCase()}
+                          </span>
+                        </dd>
+                      </div>
+                    )}
+
+                    {/* Annual Costs */}
+                    {annualTotal > 0 && (
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500 mb-1">{t('aiAnalysis.annualCosts')}</dt>
+                        <dd className="text-lg font-semibold text-gray-900">{fmt(annualTotal)}</dd>
+                      </div>
+                    )}
+
+                    {/* One-Time Costs */}
+                    {oneTimeTotal > 0 && (
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500 mb-1">{t('aiAnalysis.oneTimeCosts')}</dt>
+                        <dd className="text-lg font-semibold text-gray-900">{fmt(oneTimeTotal)}</dd>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Manage Documents button — right side */}
+                  <button
+                    onClick={() => router.push(`/properties/${propertyId}/documents`)}
+                    className="inline-flex items-center px-4 py-2 border border-purple-300 text-sm font-medium rounded-md text-purple-700 bg-white hover:bg-purple-50 transition-colors flex-shrink-0"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    {t('analysis.manageDocuments')}
+                  </button>
+                </div>
+
+                {/* Toggle button */}
+                <button
+                  onClick={() => setShowFullAnalysis(!showFullAnalysis)}
+                  className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 font-medium"
+                >
+                  {showFullAnalysis ? (
+                    <>
+                      <ChevronUp className="h-4 w-4 mr-1" />
+                      {t('aiAnalysis.showLess')}
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4 mr-1" />
+                      {t('aiAnalysis.showMore')}
+                    </>
+                  )}
+                </button>
+
+                {/* Expandable: Summary, Key Findings, Recommendations */}
+                {showFullAnalysis && (
+                  <div className="space-y-4 pt-2 border-t border-gray-100">
+                    {/* Summary */}
+                    {synthesis.overall_summary && (
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-700 mb-1">{t('aiAnalysis.summary')}</h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">{synthesis.overall_summary}</p>
+                      </div>
+                    )}
+
+                    {/* Key findings */}
+                    {synthesis.key_findings && synthesis.key_findings.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('aiAnalysis.keyFindings')}</h3>
+                        <ul className="space-y-1">
+                          {synthesis.key_findings.map((finding: string, idx: number) => (
+                            <li key={idx} className="text-sm text-gray-600 flex items-start">
+                              <span className="text-gray-400 mr-2">&bull;</span>
+                              {finding}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Recommendations */}
+                    {synthesis.recommendations && synthesis.recommendations.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('aiAnalysis.recommendations')}</h3>
+                        <ul className="space-y-1">
+                          {synthesis.recommendations.map((rec: string, idx: number) => (
+                            <li key={idx} className="text-sm text-gray-600 flex items-start">
+                              <span className="text-gray-400 mr-2">&bull;</span>
+                              {rec}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              );
+            })() : (
+              <div className="text-center py-6">
+                <p className="text-sm text-gray-500 mb-3">{t('aiAnalysis.noData')}</p>
+                <button
+                  onClick={() => router.push(`/properties/${propertyId}/documents`)}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  {t('aiAnalysis.viewDocuments')}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Apartment Design Overview Card */}
+          <div className="bg-white shadow rounded-lg p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium text-gray-900 flex items-center">
+                <Paintbrush className="h-5 w-5 mr-2 text-indigo-500" />
+                {t('designOverview.title')}
+              </h2>
+              <button
+                onClick={() => router.push(`/properties/${propertyId}/photos`)}
+                className="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                {t('designOverview.openStudio')}
+              </button>
+            </div>
+            {(() => {
+              const photosWithRedesigns = designPhotos.filter((p: any) => p.promoted_redesign);
+              if (photosWithRedesigns.length === 0) {
+                return (
+                  <div className="text-center py-6">
+                    <ImageIcon className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                    <p className="text-sm text-gray-500 mb-3">{t('designOverview.noRedesigns')}</p>
+                    <button
+                      onClick={() => router.push(`/properties/${propertyId}/photos`)}
+                      className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      <Paintbrush className="h-4 w-4 mr-2" />
+                      {t('designOverview.goToStudio')}
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {photosWithRedesigns.map((photo: any) => (
+                    <div
+                      key={photo.id}
+                      className="group cursor-pointer"
+                      onClick={() => { setPreviewPhoto(photo); setShowOriginal(false); }}
+                    >
+                      <div className="relative aspect-video rounded-lg overflow-hidden">
+                        <img
+                          src={photo.promoted_redesign.presigned_url}
+                          alt={photo.filename}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                      </div>
+                      <div className="mt-1.5">
+                        <p className="text-sm font-medium text-gray-900 truncate">{photo.filename}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {photo.room_type ? tp(`roomTypes.${photo.room_type}`) : t('designOverview.noRoomType')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Design Preview Modal */}
+          {previewPhoto && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setPreviewPhoto(null)}>
+              <div className="relative bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div className="flex items-center gap-3 flex-wrap min-w-0">
+                    {/* Editable filename */}
+                    {editingName ? (
+                      <form
+                        className="flex items-center gap-1"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (editName.trim() && editName.trim() !== previewPhoto.filename) {
+                            handleUpdatePhoto(previewPhoto.id, { filename: editName.trim() });
+                          }
+                          setEditingName(false);
+                        }}
+                      >
+                        <input
+                          autoFocus
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onBlur={() => {
+                            if (editName.trim() && editName.trim() !== previewPhoto.filename) {
+                              handleUpdatePhoto(previewPhoto.id, { filename: editName.trim() });
+                            }
+                            setEditingName(false);
+                          }}
+                          className="text-lg font-semibold text-gray-900 border-b-2 border-indigo-500 outline-none bg-transparent px-0 py-0"
+                        />
+                        <button type="submit" className="p-0.5 text-indigo-600 hover:text-indigo-800">
+                          <Check className="h-4 w-4" />
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        className="group flex items-center gap-1.5"
+                        onClick={() => { setEditName(previewPhoto.filename); setEditingName(true); }}
+                      >
+                        <h3 className="text-lg font-semibold text-gray-900">{previewPhoto.filename}</h3>
+                        <Pencil className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    )}
+
+                    {/* Editable room type */}
+                    {editingRoomType ? (
+                      <select
+                        autoFocus
+                        value={editRoomType}
+                        onChange={(e) => {
+                          handleUpdatePhoto(previewPhoto.id, { room_type: e.target.value });
+                          setEditingRoomType(false);
+                        }}
+                        onBlur={() => setEditingRoomType(false)}
+                        className="text-xs font-medium rounded-full px-2.5 py-1 border border-indigo-300 bg-indigo-50 text-indigo-700 outline-none"
+                      >
+                        {roomTypeOptions.map((rt) => (
+                          <option key={rt} value={rt}>{tp(`roomTypes.${rt}`)}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <button
+                        className="group inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-colors"
+                        onClick={() => { setEditRoomType(previewPhoto.room_type || 'living room'); setEditingRoomType(true); }}
+                      >
+                        {previewPhoto.room_type ? tp(`roomTypes.${previewPhoto.room_type}`) : t('designOverview.noRoomType')}
+                        <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    )}
+
+                    {previewPhoto.promoted_redesign.style_preset && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 uppercase">
+                        {previewPhoto.promoted_redesign.style_preset.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={() => setPreviewPhoto(null)} className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 flex-shrink-0">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Image with compare toggle */}
+                <div className="relative h-[55vh] bg-gray-100">
+                  <img
+                    src={showOriginal ? previewPhoto.presigned_url : previewPhoto.promoted_redesign.presigned_url}
+                    alt={previewPhoto.filename}
+                    className="w-full h-full object-contain"
+                  />
+                  <button
+                    onClick={() => setShowOriginal(!showOriginal)}
+                    className={`absolute bottom-3 left-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium shadow-lg transition-colors ${
+                      showOriginal
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-white/90 text-gray-700 hover:bg-white'
+                    }`}
+                  >
+                    <Columns className="h-3.5 w-3.5" />
+                    {showOriginal ? t('designOverview.showRedesign') : t('designOverview.showOriginal')}
+                  </button>
+                </div>
+
+                {/* Prompt */}
+                {previewPhoto.promoted_redesign.prompt && (
+                  <div className="px-4 py-3 border-t border-gray-100">
+                    <p className="text-xs font-medium text-gray-500 mb-1">{t('designOverview.prompt')}</p>
+                    <p className="text-sm text-gray-700 line-clamp-3">{previewPhoto.promoted_redesign.prompt}</p>
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="flex justify-end p-4 border-t border-gray-200">
+                  <button
+                    onClick={() => { setPreviewPhoto(null); router.push(`/properties/${propertyId}/photos`); }}
+                    className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+                  >
+                    <Paintbrush className="h-4 w-4 mr-2" />
+                    {t('designOverview.goToStudioAction')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Market Trend Visualization */}
           {priceAnalysis && (

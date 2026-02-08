@@ -19,6 +19,7 @@ class PropertyBase(BaseModel):
     rooms: Optional[int] = None
     property_type: Optional[str] = None
     floor: Optional[int] = None
+    building_floors: Optional[int] = None
     building_year: Optional[int] = None
 
 
@@ -32,11 +33,15 @@ class PropertyUpdate(BaseModel):
     """Schema for updating a property."""
 
     address: Optional[str] = None
+    postal_code: Optional[str] = None
+    city: Optional[str] = None
+    department: Optional[str] = None
     asking_price: Optional[float] = None
     surface_area: Optional[float] = None
     rooms: Optional[int] = None
     property_type: Optional[str] = None
     floor: Optional[int] = None
+    building_floors: Optional[int] = None
     building_year: Optional[int] = None
 
 
@@ -142,6 +147,26 @@ class DVFGroupedTransactionResponse(BaseModel):
         if self.is_multi_unit is None:
             self.is_multi_unit = self.unit_count > 1
         return self
+
+    class Config:
+        from_attributes = True
+
+
+class PropertySynthesisPreview(BaseModel):
+    """Preview of property document synthesis for dashboard cards."""
+
+    risk_level: Optional[str] = None
+    total_annual_cost: Optional[float] = None
+    total_one_time_cost: Optional[float] = None
+    key_findings: Optional[List[str]] = None
+    document_count: int = 0
+    redesign_count: int = 0
+
+
+class PropertyWithSynthesisResponse(PropertyResponse):
+    """Property response enriched with synthesis preview data."""
+
+    synthesis: Optional[PropertySynthesisPreview] = None
 
     class Config:
         from_attributes = True

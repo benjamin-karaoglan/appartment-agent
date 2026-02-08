@@ -19,41 +19,41 @@ backend/
 ├── app/
 │   ├── api/                 # REST API endpoints
 │   │   ├── analysis.py      # Price analysis endpoints
-│   │   ├── documents.py     # Document management
-│   │   ├── photos.py        # Photo upload and redesign
-│   │   ├── properties.py    # Property CRUD
+│   │   ├── documents.py     # Document management (bulk delete, rename, synthesis)
+│   │   ├── photos.py        # Photo upload, redesign, and promote/demote
+│   │   ├── properties.py    # Property CRUD + with-synthesis endpoint
 │   │   ├── users.py         # Authentication
-│   │   └── webhooks.py      # MinIO webhooks
+│   │   └── webhooks.py      # Storage webhooks
 │   ├── core/                # Core configuration
-│   │   ├── config.py        # Settings management
+│   │   ├── config.py        # Settings management (+ GCS_SIGNING_SERVICE_ACCOUNT)
 │   │   ├── database.py      # Database connection
 │   │   ├── better_auth_security.py  # Better Auth session validation
 │   │   ├── i18n.py          # Internationalization (FR/EN)
 │   │   ├── logging.py       # Logging setup
 │   │   └── security.py      # Legacy JWT auth
 │   ├── models/              # SQLAlchemy models
-│   │   ├── analysis.py      # Analysis results
-│   │   ├── document.py      # Documents
-│   │   ├── photo.py         # Photos and redesigns
-│   │   ├── property.py      # Properties and DVF
+│   │   ├── analysis.py      # Analysis results (DocumentSummary)
+│   │   ├── document.py      # Documents (storage_key/storage_bucket)
+│   │   ├── photo.py         # Photos (promoted_redesign_id) and redesigns
+│   │   ├── property.py      # Properties (building_floors) and DVF
 │   │   └── user.py          # Users
 │   ├── schemas/             # Pydantic schemas
-│   │   ├── document.py      # Document schemas
-│   │   ├── photo.py         # Photo schemas
-│   │   └── property.py      # Property schemas
+│   │   ├── document.py      # Document schemas (BulkDeleteRequest, RenameRequest)
+│   │   ├── photo.py         # Photo schemas (PromotedRedesignResponse)
+│   │   └── property.py      # Property schemas (PropertyUpdate, PropertyWithSynthesis)
 │   ├── services/            # Business logic
 │   │   ├── ai/              # AI services
 │   │   │   ├── document_analyzer.py
-│   │   │   ├── document_processor.py
+│   │   │   ├── document_processor.py  # Native PDF + thinking
 │   │   │   └── image_generator.py
 │   │   ├── documents/       # Document processing
-│   │   │   ├── bulk_processor.py
+│   │   │   ├── bulk_processor.py      # Async parallel processing
 │   │   │   └── parser.py
 │   │   ├── dvf_service.py   # DVF data management
 │   │   ├── price_analysis.py
-│   │   └── storage.py       # MinIO/GCS abstraction
+│   │   └── storage.py       # Storage abstraction (MinIO/GCS)
 │   ├── prompts/             # AI prompt templates
-│   │   └── v1/              # Versioned prompts
+│   │   └── v1/              # Versioned prompts (incl. dp_process_other.md)
 │   └── main.py              # Application entry
 ├── alembic/                 # Database migrations
 ├── scripts/                 # Utility scripts

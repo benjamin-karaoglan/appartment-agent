@@ -5,9 +5,9 @@ Handles bulk document uploads with parallel processing and synthesis.
 """
 
 import asyncio
-import base64
 import json
 import logging
+import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -23,25 +23,46 @@ from app.services.storage import get_storage_service
 logger = logging.getLogger(__name__)
 
 
-def pdf_bytes_to_images_base64(pdf_bytes: bytes, max_pages: int = 20) -> List[str]:
-    """Convert PDF bytes to base64-encoded images."""
+def prepare_pdf(pdf_bytes: bytes) -> Dict[str, Any]:
+    """Prepare a PDF for processing: extract text and metadata using PyMuPDF."""
     try:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        images = []
+        page_count = len(doc)
 
-        for page_num in range(min(len(doc), max_pages)):
+        # Extract text from all pages
+        text_parts = []
+        for page_num in range(page_count):
             page = doc[page_num]
-            pix = page.get_pixmap(matrix=fitz.Matrix(150 / 72, 150 / 72))
-            img_bytes = pix.tobytes("png")
-            images.append(base64.b64encode(img_bytes).decode("utf-8"))
+            text = page.get_text("text")
+            if text.strip():
+                text_parts.append(text)
 
         doc.close()
-        logger.info(f"Converted {len(images)} pages to images")
-        return images
+
+        extracted_text = "\n\n".join(text_parts)
+        text_extractable = len(extracted_text) > 500
+
+        logger.info(
+            f"PDF prepared: {page_count} pages, "
+            f"{len(extracted_text)} chars extracted, "
+            f"text_extractable={text_extractable}"
+        )
+
+        return {
+            "pdf_data": pdf_bytes,
+            "text_extractable": text_extractable,
+            "extracted_text": extracted_text if text_extractable else "",
+            "page_count": page_count,
+        }
 
     except Exception as e:
-        logger.error(f"PDF conversion error: {e}")
-        return []
+        logger.error(f"PDF preparation error: {e}")
+        return {
+            "pdf_data": pdf_bytes,
+            "text_extractable": False,
+            "extracted_text": "",
+            "page_count": 0,
+        }
 
 
 class BulkProcessor:
@@ -50,14 +71,14 @@ class BulkProcessor:
 
     Flow:
     1. Download files from storage
-    2. Convert PDFs to images
-    3. Process each document with AI
+    2. Prepare PDFs (extract text + metadata)
+    3. Process each document with AI (native PDF)
     4. Save results incrementally
     5. Synthesize all results
     """
 
     def __init__(self):
-        self.active_tasks: Dict[str, asyncio.Task] = {}
+        self.active_tasks: Dict[str, threading.Thread] = {}
 
     async def process_bulk_upload(
         self,
@@ -82,31 +103,35 @@ class BulkProcessor:
             logger.info("Downloading files from storage...")
             file_data_list = await self._download_files(document_uploads)
 
-            # Step 2: Convert PDFs to images
-            logger.info("Converting PDFs to images...")
-            images_list = await self._convert_pdfs(file_data_list)
+            # Step 2: Prepare PDFs (text extraction + metadata)
+            logger.info("Preparing PDF documents...")
+            prepared_docs = await self._prepare_documents(file_data_list)
 
-            # Step 3: Process each document
-            logger.info(f"Processing {len(document_uploads)} documents...")
+            # Step 3: Process all documents in parallel
+            logger.info(f"Processing {len(document_uploads)} documents in parallel...")
             processor = get_document_processor()
 
-            results = []
-            for i, upload in enumerate(document_uploads):
-                logger.info(f"Processing {i+1}/{len(document_uploads)}: {upload['filename']}")
-
+            async def process_and_save(i: int, upload: Dict[str, Any]) -> Dict[str, Any]:
+                """Process a single document and save the result."""
+                logger.info(f"Starting {i+1}/{len(document_uploads)}: {upload['filename']}")
+                doc_data = {
+                    "filename": upload["filename"],
+                    "pdf_data": prepared_docs[i]["pdf_data"],
+                    "text_extractable": prepared_docs[i]["text_extractable"],
+                    "extracted_text": prepared_docs[i]["extracted_text"],
+                    "page_count": prepared_docs[i]["page_count"],
+                    "document_id": upload["document_id"],
+                }
                 result = await processor.process_document(
-                    {
-                        "filename": upload["filename"],
-                        "file_data_base64": images_list[i],
-                        "document_id": upload["document_id"],
-                    },
+                    doc_data,
                     output_language=output_language,
                 )
-                results.append(result)
-
-                # Save immediately
                 await self._save_document_result(db, result)
                 logger.info(f"Completed {i+1}/{len(document_uploads)}: {upload['filename']}")
+                return result
+
+            tasks = [process_and_save(i, upload) for i, upload in enumerate(document_uploads)]
+            results = await asyncio.gather(*tasks)
 
             # Step 4: Synthesize
             logger.info("Synthesizing results...")
@@ -135,21 +160,21 @@ class BulkProcessor:
         """Download files from storage in parallel."""
         storage = get_storage_service()
 
-        async def download_one(minio_key: str) -> bytes:
+        async def download_one(storage_key: str) -> bytes:
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, storage.download_file, minio_key)
+            return await loop.run_in_executor(None, storage.download_file, storage_key)
 
         tasks = [download_one(upload["storage_key"]) for upload in document_uploads]
         return await asyncio.gather(*tasks)
 
-    async def _convert_pdfs(self, file_data_list: List[bytes]) -> List[List[str]]:
-        """Convert PDFs to images in parallel."""
+    async def _prepare_documents(self, file_data_list: List[bytes]) -> List[Dict[str, Any]]:
+        """Prepare PDFs in parallel: extract text and metadata."""
 
-        async def convert_one(file_data: bytes) -> List[str]:
+        async def prepare_one(file_data: bytes) -> Dict[str, Any]:
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, pdf_bytes_to_images_base64, file_data)
+            return await loop.run_in_executor(None, prepare_pdf, file_data)
 
-        tasks = [convert_one(data) for data in file_data_list]
+        tasks = [prepare_one(data) for data in file_data_list]
         return await asyncio.gather(*tasks)
 
     async def _save_document_result(self, db: Session, result: Dict[str, Any]) -> None:
@@ -195,7 +220,9 @@ class BulkProcessor:
     ) -> None:
         """Save synthesis to database."""
         summary = (
-            db.query(DocumentSummary).filter(DocumentSummary.property_id == property_id).first()
+            db.query(DocumentSummary)
+            .filter(DocumentSummary.property_id == property_id, DocumentSummary.category == None)
+            .first()
         )
 
         if not summary:
@@ -208,6 +235,16 @@ class BulkProcessor:
         summary.risk_level = synthesis.get("risk_level", "unknown")
         summary.key_findings = synthesis.get("key_findings", [])
         summary.recommendations = synthesis.get("recommendations", [])
+
+        # Preserve user_overrides from previous synthesis_data when regenerating
+        if summary.synthesis_data:
+            try:
+                old_data = json.loads(summary.synthesis_data)
+                if "user_overrides" in old_data:
+                    synthesis["user_overrides"] = old_data["user_overrides"]
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         summary.synthesis_data = json.dumps(synthesis)
         summary.last_updated = datetime.utcnow()
 
@@ -221,14 +258,24 @@ class BulkProcessor:
         document_uploads: List[Dict[str, Any]],
         output_language: str = "French",
     ) -> None:
-        """Start background processing task."""
-        task = asyncio.create_task(
-            self.process_bulk_upload(
-                workflow_id, property_id, document_uploads, output_language=output_language
-            )
-        )
-        self.active_tasks[workflow_id] = task
-        logger.info(f"Started background task: {workflow_id}")
+        """Start background processing in a dedicated thread."""
+
+        def run_in_thread():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(
+                    self.process_bulk_upload(
+                        workflow_id, property_id, document_uploads, output_language
+                    )
+                )
+            finally:
+                loop.close()
+
+        thread = threading.Thread(target=run_in_thread, daemon=True)
+        thread.start()
+        self.active_tasks[workflow_id] = thread
+        logger.info(f"Started background thread for: {workflow_id}")
 
 
 # Singleton

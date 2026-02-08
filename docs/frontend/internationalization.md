@@ -172,6 +172,35 @@ prompt = get_prompt("dp_process_pv_ag", filename="pv.pdf", output_language="Fren
 
 This ensures document analysis results, recommendations, and summaries are returned in the user's language.
 
+## Translation Key Namespaces
+
+The translation files are organized by feature area. Key namespaces include:
+
+| Namespace | Description |
+|-----------|-------------|
+| `header` | Navigation and locale switcher |
+| `dashboard` | Dashboard page, property cards |
+| `propertyForm` | Property creation/editing form fields |
+| `propertyDetail` | Property detail page sections |
+| `propertyDetail.info` | Property info card (edit, save, cancel, field labels) |
+| `propertyDetail.synthesis` | AI synthesis display (confidence, breakdowns, themes, tantiemes) |
+| `propertyDetail.documents` | Document list, upload phases, bulk operations |
+| `propertyDetail.documents.documentList` | Document list UI (expand, collapse, resynthesize) |
+| `propertyDetail.photos` | Photo management (promote/demote redesigns) |
+| `propertyCard` | Dashboard property cards (risk levels, annual costs, doc counts) |
+
+### Recently Added Keys
+
+The following translation namespaces were added to support new features:
+
+- **Property editing**: `propertyDetail.info.edit`, `save`, `cancel`, `saveFailed`, `address`, `postalCode`, `city`, `department`, `selectType`, `appartement`, `maison`, `buildingFloors`, `buildingFloorsHouse`
+- **Risk badges**: `propertyCard.risk.low`, `risk.medium`, `risk.high`
+- **Synthesis details**: `synthesis.confidence`, `annualBreakdown`, `oneTimeBreakdown`, `crossDocThemes`, `actionItems`, `riskFactors`, `tantiemes`, `lotTantiemes`, `totalTantiemes`, `sharePercentage`, `editTantiemes`, `notDetected`, `tantiemesHint`
+- **Upload phases**: `documents.stepUpload`, `stepAnalysis`, `stepSynthesis`, `uploading`, `uploadingSubtitle`, `synthesizing`, `synthesizingSubtitle`
+- **Bulk operations**: `documents.selectAll`, `deselectAll`, `deleteSelected`, `selectedCount`, `bulkDeleteTitle`, `bulkDeleteMessage`
+- **Document management**: `documents.rename`, `renameDocument`, `documentList.title`, `expandDetails`, `collapseDetails`, `resynthesize`, `resynthesizing`, `emptyState`
+- **Photo redesigns**: `photos.promoteRedesign`, `demoteRedesign`, `promoted`, `redesignPromoted`, `redesignDemoted`, `promoteFailed`
+
 ## Adding a New Translation Key
 
 1. Add the key to both `messages/en.json` and `messages/fr.json`

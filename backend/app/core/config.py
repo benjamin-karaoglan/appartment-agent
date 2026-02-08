@@ -50,7 +50,7 @@ class Settings(BaseSettings):
 
     # Gemini Models
     GEMINI_LLM_MODEL: str = os.getenv(
-        "GEMINI_LLM_MODEL", "gemini-2.0-flash-lite"
+        "GEMINI_LLM_MODEL", "gemini-2.5-flash"
     )  # Default for text/document analysis
     GEMINI_IMAGE_MODEL: str = os.getenv(
         "GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"
@@ -103,6 +103,7 @@ class Settings(BaseSettings):
     # Google Cloud Storage (for GCP production)
     GCS_DOCUMENTS_BUCKET: str = os.getenv("GCS_DOCUMENTS_BUCKET", "")
     GCS_PHOTOS_BUCKET: str = os.getenv("GCS_PHOTOS_BUCKET", "")
+    GCS_SIGNING_SERVICE_ACCOUNT: str = os.getenv("GCS_SIGNING_SERVICE_ACCOUNT", "")
 
     class Config:
         env_file = ".env"

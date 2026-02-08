@@ -129,10 +129,59 @@ POST /api/properties
 GET /api/properties/{id}
 ```
 
+#### List Properties with Synthesis
+
+```http
+GET /api/properties/with-synthesis
+```
+
+Returns all properties enriched with synthesis preview data (risk level, costs, document/redesign counts).
+
+**Response** `200 OK`:
+
+```json
+[
+  {
+    "id": 1,
+    "address": "56 Rue Notre-Dame des Champs",
+    "postal_code": "75006",
+    "city": "Paris",
+    "asking_price": 850000,
+    "surface_area": 65.5,
+    "synthesis": {
+      "risk_level": "medium",
+      "total_annual_cost": 3500.0,
+      "total_one_time_cost": 15000.0,
+      "key_findings": "Property analysis summary...",
+      "document_count": 5,
+      "redesign_count": 2
+    }
+  }
+]
+```
+
 #### Update Property
 
 ```http
-PUT /api/properties/{id}
+PATCH /api/properties/{id}
+```
+
+**Request Body** (all fields optional):
+
+```json
+{
+  "address": "56 Rue Notre-Dame des Champs",
+  "postal_code": "75006",
+  "city": "Paris",
+  "department": "75",
+  "property_type": "apartment",
+  "asking_price": 840000,
+  "surface_area": 65.5,
+  "rooms": 3,
+  "floor": 4,
+  "building_floors": 7,
+  "building_year": 1920
+}
 ```
 
 #### Delete Property
@@ -259,6 +308,90 @@ GET /api/documents/{id}
 
 ```http
 DELETE /api/documents/{id}
+```
+
+Deleting a document automatically triggers synthesis regeneration for the property.
+
+#### Bulk Delete Documents
+
+```http
+POST /api/documents/bulk-delete
+```
+
+**Request Body**:
+
+```json
+{
+  "document_ids": [1, 2, 3]
+}
+```
+
+**Response** `200 OK`:
+
+```json
+{
+  "deleted_count": 3
+}
+```
+
+Automatically triggers synthesis regeneration after deletion.
+
+#### Rename Document
+
+```http
+PATCH /api/documents/{document_id}
+```
+
+**Request Body**:
+
+```json
+{
+  "filename": "new-document-name"
+}
+```
+
+The original file extension is preserved automatically.
+
+#### Save Synthesis Overrides
+
+```http
+PATCH /api/documents/synthesis/{property_id}/overrides
+```
+
+Saves user-defined overrides into the synthesis data (e.g., tantiemes values, cost adjustments). Overrides are preserved across synthesis regenerations.
+
+**Request Body**:
+
+```json
+{
+  "user_overrides": {
+    "lot_tantiemes": 150,
+    "total_tantiemes": 10000
+  }
+}
+```
+
+#### Regenerate Overall Synthesis
+
+```http
+POST /api/documents/synthesis/{property_id}/regenerate-overall
+```
+
+Manually triggers regeneration of the cross-document synthesis from all analyzed documents. User overrides are preserved.
+
+**Response** `200 OK`:
+
+```json
+{
+  "status": "success",
+  "synthesis": {
+    "summary": "Updated synthesis...",
+    "total_annual_cost": 3500.0,
+    "total_one_time_cost": 15000.0,
+    "risk_level": "medium",
+    "synthesis_data": { ... }
+  }
+}
 ```
 
 ---
@@ -388,6 +521,40 @@ POST /api/photos/{id}/redesign
 ```http
 GET /api/photos/redesign/{redesign_id}
 ```
+
+#### Promote Redesign
+
+```http
+PATCH /api/photos/{photo_id}/promote/{redesign_id}
+```
+
+Sets a redesign as the promoted (featured) redesign for a photo. The promoted redesign is displayed on the property overview page.
+
+**Response** `200 OK`:
+
+```json
+{
+  "id": 1,
+  "filename": "living_room.jpg",
+  "room_type": "living_room",
+  "promoted_redesign": {
+    "id": 5,
+    "redesign_uuid": "abc-123",
+    "style_preset": "modern",
+    "prompt": "Modern Norwegian style...",
+    "presigned_url": "https://...",
+    "created_at": "2026-02-08T10:00:00Z"
+  }
+}
+```
+
+#### Remove Promoted Redesign
+
+```http
+DELETE /api/photos/{photo_id}/promote
+```
+
+Clears the promoted redesign from a photo.
 
 ---
 

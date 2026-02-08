@@ -10,10 +10,10 @@ flowchart TB
 
     subgraph FrontendLayer["Frontend Layer - Next.js 14"]
         subgraph Pages["Pages (App Router)"]
-            P1["Dashboard<br/>Investment analysis"]
-            P2["Properties<br/>Address search"]
-            P3["Documents<br/>Upload & analysis"]
-            P4["Photos<br/>AI redesign studio"]
+            P1["Dashboard<br/>Synthesis previews"]
+            P2["Properties<br/>Inline editing"]
+            P3["Documents<br/>Multi-phase processing"]
+            P4["Photos<br/>Redesign + promote"]
         end
 
         subgraph Components["Reusable Components"]
@@ -32,14 +32,14 @@ flowchart TB
     subgraph BackendLayer["Backend Layer - FastAPI"]
         subgraph Endpoints["API Endpoints"]
             E1["/api/users<br/>Auth & profiles"]
-            E2["/api/properties<br/>Property management"]
-            E3["/api/documents<br/>Upload & analysis"]
+            E2["/api/properties<br/>CRUD + with-synthesis"]
+            E3["/api/documents<br/>Upload, bulk ops, synthesis"]
             E4["/api/analysis<br/>Price trends"]
-            E5["/api/photos<br/>Redesign generation"]
+            E5["/api/photos<br/>Redesign + promote"]
         end
 
         subgraph Services["Service Layer"]
-            S1["AI Services<br/>Analyzer | Processor | ImageGen"]
+            S1["AI Services<br/>Native PDF | Thinking | Synthesis"]
             S2["Storage Service<br/>MinIO | GCS abstraction"]
             S3["DVF Service<br/>5.4M+ transactions"]
             S4["Price Analysis<br/>Trends & projections"]
@@ -206,7 +206,8 @@ Stores structured data:
 | `ba_session` | ~100s | Better Auth active sessions |
 | `ba_account` | ~100s | Better Auth OAuth provider links |
 | `properties` | ~100s | Properties and their metadata |
-| `documents` | ~1000s | Documents and analysis results |
+| `documents` | ~1000s | Documents and analysis results (5 categories) |
+| `document_summaries` | ~100s | Cross-document synthesis with user overrides |
 | `dvf_records` | 5.4M+ | French property transactions (2022-2025) |
 
 #### Redis

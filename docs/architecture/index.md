@@ -88,9 +88,11 @@ flowchart LR
 
 Background processing for:
 
-- Document analysis (AI classification + extraction)
-- Bulk uploads (100+ documents)
+- Document analysis (native PDF classification + extraction with thinking)
+- Bulk uploads with multi-phase tracking (upload, analysis, synthesis)
+- Cross-document synthesis with cost breakdowns and tantiemes
 - Image generation (photo redesigns)
+- Automatic synthesis regeneration on document changes
 
 ### 3. Multi-Backend Storage
 

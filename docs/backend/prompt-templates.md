@@ -88,12 +88,13 @@ If you forget to escape, `str.format()` will silently fail and variables like `{
 
 | Template | Variables | Purpose |
 |----------|-----------|---------|
-| `dp_classify_document.md` | `{filename}` | Classify document type |
-| `dp_process_pv_ag.md` | `{filename}`, `{output_language}` | Process PV d'AG |
-| `dp_process_diagnostic.md` | `{filename}`, `{output_language}` | Process diagnostics |
-| `dp_process_tax.md` | `{filename}`, `{output_language}` | Process tax documents |
-| `dp_process_charges.md` | `{filename}`, `{output_language}` | Process charges |
-| `dp_synthesize_results.md` | `{summaries}`, `{output_language}` | Synthesize all results |
+| `dp_classify_document.md` | `{filename}` | Classify document type (5 categories) |
+| `dp_process_pv_ag.md` | `{filename}`, `{output_language}` | Process PV d'AG (assembly minutes) |
+| `dp_process_diagnostic.md` | `{filename}`, `{output_language}` | Process diagnostic documents (DPE, amiante, plomb, etc.) |
+| `dp_process_tax.md` | `{filename}`, `{output_language}` | Process property tax documents |
+| `dp_process_charges.md` | `{filename}`, `{output_language}` | Process copropriete charges |
+| `dp_process_other.md` | `{filename}`, `{output_language}` | Process other documents (rules, contracts, insurance) |
+| `dp_synthesize_results.md` | `{summaries}`, `{output_language}` | Cross-document synthesis with cost breakdowns, tantiemes, risk factors, buyer action items, and confidence scoring |
 
 ### Document Parser (used by `DocumentParser`)
 

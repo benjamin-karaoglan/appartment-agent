@@ -20,6 +20,7 @@ interface PropertyFormData {
   rooms?: number;
   property_type?: string;
   floor?: number;
+  building_floors?: number;
   building_year?: number;
 }
 
@@ -47,8 +48,11 @@ function NewPropertyContent() {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<PropertyFormData>();
+
+  const watchedPropertyType = watch('property_type');
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -334,6 +338,21 @@ function NewPropertyContent() {
                       })}
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 text-gray-900 bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                       placeholder="2"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="building_floors" className="block text-sm font-medium text-gray-700">
+                      {watchedPropertyType === 'Maison' ? t('details.buildingFloorsHouse') : t('details.buildingFloors')}
+                    </label>
+                    <input
+                      id="building_floors"
+                      type="number"
+                      {...register('building_floors', {
+                        valueAsNumber: true,
+                      })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 text-gray-900 bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="5"
                     />
                   </div>
 

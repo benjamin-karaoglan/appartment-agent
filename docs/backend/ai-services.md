@@ -6,7 +6,7 @@ AppArt Agent uses Google Gemini for document analysis, classification, and image
 
 | Service | Model | Purpose |
 |---------|-------|---------|
-| Document Analysis | `gemini-2.0-flash-lite` | Text and vision-based document parsing |
+| Document Analysis | `gemini-2.0-flash-lite` | Native PDF processing with thinking/reasoning |
 | Image Generation | `gemini-2.0-flash-exp` | Photo redesign and visualization |
 
 ## Architecture
@@ -60,11 +60,11 @@ The analyzer automatically configures:
 
 ### Document Classification
 
-Automatically identifies document types using vision analysis:
+Automatically identifies document types using native PDF input:
 
 ```python
 classification = await analyzer.classify_document(
-    images=[pdf_page_image],  # First page as image
+    pdf_bytes=pdf_file_bytes,  # Native PDF sent directly to Gemini
     filename="pv_ag_2024.pdf"
 )
 
@@ -76,28 +76,25 @@ classification = await analyzer.classify_document(
 }
 ```
 
-**Supported Document Types**:
+**Supported Document Types (5 categories)**:
 
 | Type | Description |
 |------|-------------|
 | `pv_ag` | Procès-verbal d'Assemblée Générale (meeting minutes) |
-| `diagnostic_dpe` | Diagnostic de Performance Énergétique |
-| `diagnostic_amiante` | Amiante (asbestos) report |
-| `diagnostic_plomb` | Plomb (lead) report |
-| `diagnostic_electric` | Electrical inspection |
-| `diagnostic_gas` | Gas inspection |
-| `tax_fonciere` | Taxe Foncière (property tax) |
-| `charges` | Condominium charges |
+| `diags` | Diagnostic documents (DPE, amiante, plomb, electric, gas, etc.) |
+| `taxe_fonciere` | Taxe Foncière (property tax) |
+| `charges` | Copropriete charges |
+| `other` | Other property documents (rules, contracts, insurance, etc.) |
 
 ### Document Analysis
 
-Analyzes document content with type-specific prompts:
+Analyzes document content with type-specific prompts. PDFs are sent natively to Gemini with optional extracted text for context. Thinking/reasoning is enabled with an 8192-token budget for complex analysis:
 
 ```python
 analysis = await analyzer.analyze_document(
     document_type="pv_ag",
-    images=pdf_images,  # All pages as images
-    text_content=extracted_text  # Optional OCR text
+    pdf_bytes=pdf_file_bytes,      # Native PDF sent directly
+    extracted_text=pdf_text_content  # Text extracted from PDF for context
 )
 
 # Returns structured analysis based on document type
@@ -105,14 +102,15 @@ analysis = await analyzer.analyze_document(
 
 ### Multi-Document Synthesis
 
-Aggregates analysis from multiple documents:
+Aggregates analysis from multiple documents with cross-document theme extraction, tantiemes calculation, and buyer action items:
 
 ```python
 synthesis = await analyzer.synthesize_documents(
     analyses=[
         {"document_type": "pv_ag", "analysis": {...}},
-        {"document_type": "diagnostic_dpe", "analysis": {...}},
-        {"document_type": "charges", "analysis": {...}}
+        {"document_type": "diags", "analysis": {...}},
+        {"document_type": "charges", "analysis": {...}},
+        {"document_type": "other", "analysis": {...}}
     ]
 )
 
@@ -123,7 +121,15 @@ synthesis = await analyzer.synthesize_documents(
     "total_one_time_cost": 25000.0,
     "risk_level": "medium",
     "key_findings": [...],
-    "recommendations": [...]
+    "recommendations": [...],
+    "annual_cost_breakdown": {"charges_courantes": {"amount": 2400, "source": "charges"}},
+    "one_time_cost_breakdown": [{"description": "Roof repair", "amount": 15000, ...}],
+    "cross_document_themes": [{"theme": "Aging building", "documents_involved": [...]}],
+    "buyer_action_items": [{"priority": 1, "action": "Negotiate price", "urgency": "high"}],
+    "risk_factors": ["Lead presence detected", ...],
+    "tantiemes_info": {"lot_tantiemes": 150, "total_tantiemes": 10000, "share_percentage": 1.5},
+    "confidence_score": 85,
+    "confidence_reasoning": "Based on 5 analyzed documents..."
 }
 ```
 
@@ -151,13 +157,23 @@ result = await processor.process_bulk_upload(
 
 ```mermaid
 flowchart TD
-    A[1. Document Upload] --> B[2. PDF → Images<br/>PyMuPDF]
-    B --> C[3. Classification<br/>Gemini Vision]
-    C --> D[4. Parallel Analysis<br/>type-specific prompts]
+    A[1. Document Upload] --> B[2. PDF Preparation<br/>Text extraction + metadata]
+    B --> C[3. Classification<br/>Native PDF to Gemini]
+    C --> D[4. Parallel Analysis<br/>Type-specific prompts<br/>with thinking enabled]
     D --> E[5. Result Aggregation]
-    E --> F[6. Cross-Document Synthesis]
-    F --> G[7. Database Update]
+    E --> F[6. Cross-Document Synthesis<br/>Themes, tantiemes, action items]
+    F --> G[7. Database Update<br/>Preserve user overrides]
 ```
+
+### Key Processing Features
+
+- **Native PDF Input**: PDF bytes are sent directly to Gemini instead of converting to images
+- **Text Extraction**: Text is extracted from PDFs using PyMuPDF for additional context
+- **Thinking/Reasoning**: 8192-token thinking budget enabled for complex document analysis
+- **Async Processing**: All Gemini API calls wrapped in `asyncio.to_thread()` for non-blocking execution
+- **Parallel Analysis**: Multiple documents processed concurrently via `asyncio.gather()`
+- **User Override Preservation**: Synthesis regeneration preserves user-defined overrides (tantiemes, cost adjustments)
+- **Automatic Re-synthesis**: Synthesis is automatically regenerated after document uploads or deletions
 
 ## Image Generator
 
@@ -204,12 +220,14 @@ prompts/
     ├── analyze_photo.md
     ├── analyze_pvag.md
     ├── analyze_tax_charges.md
+    ├── dp_classify_document.md
+    ├── dp_process_charges.md
+    ├── dp_process_diagnostic.md
+    ├── dp_process_other.md
+    ├── dp_process_pv_ag.md
+    ├── dp_process_tax.md
+    ├── dp_synthesize_results.md
     ├── generate_property_report.md
-    ├── process_charges.md
-    ├── process_diagnostic.md
-    ├── process_pv_ag.md
-    ├── process_tax.md
-    ├── synthesize_documents.md
     ├── system_document_analyzer.md
     ├── system_document_classifier.md
     └── system_synthesis.md
@@ -241,6 +259,9 @@ GOOGLE_CLOUD_API_KEY=your_api_key           # Direct API
 GEMINI_USE_VERTEXAI=true                    # Use Vertex AI
 GOOGLE_CLOUD_PROJECT=your_project           # Required for Vertex AI
 GOOGLE_CLOUD_LOCATION=us-central1           # Vertex AI region
+
+# Storage signing (production)
+GCS_SIGNING_SERVICE_ACCOUNT=sa@project.iam.gserviceaccount.com  # Explicit SA for signing
 ```
 
 ### Authentication Methods
@@ -284,12 +305,12 @@ This ensures you test with:
 
 ### Token Limits
 
-| Operation | Max Tokens |
-|-----------|-----------|
-| Classification | 1,024 |
-| Document Analysis | 4,096 |
-| Synthesis | 8,192 |
-| Image Generation | N/A |
+| Operation | Max Output Tokens | Thinking Budget |
+|-----------|-------------------|-----------------|
+| Classification | 1,024 | Disabled |
+| Document Analysis | 4,096 | 8,192 |
+| Synthesis | 8,192 | 8,192 |
+| Image Generation | N/A | N/A |
 
 ## Error Handling
 

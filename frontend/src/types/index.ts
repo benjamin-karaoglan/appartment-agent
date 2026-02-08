@@ -28,6 +28,7 @@ export interface Property {
   rooms?: number
   property_type?: string
   floor?: number
+  building_floors?: number
   building_year?: number
   estimated_value?: number
   price_per_sqm?: number
@@ -120,6 +121,19 @@ export interface DiagnosticAnalysis {
   estimated_renovation_cost?: number
   summary: string
   recommendations: string[]
+}
+
+export interface PropertySynthesisPreview {
+  risk_level?: string
+  total_annual_cost?: number
+  total_one_time_cost?: number
+  key_findings?: string[]
+  document_count: number
+  redesign_count: number
+}
+
+export interface PropertyWithSynthesis extends Property {
+  synthesis?: PropertySynthesisPreview | null
 }
 
 export interface TaxChargesAnalysis {

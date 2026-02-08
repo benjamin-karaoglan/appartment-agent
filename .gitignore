@@ -111,3 +111,6 @@ deployer-key.json
 # Cache
 .ruff_cache/
 .mypy_cache/
+
+# Assets
+assets/

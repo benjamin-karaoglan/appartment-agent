@@ -20,6 +20,7 @@ from app.schemas.photo import (
     PhotoListResponse,
     PhotoResponse,
     PhotoUpdate,
+    PromotedRedesignResponse,
     RedesignListResponse,
     RedesignRequest,
     RedesignResponse,
@@ -150,7 +151,7 @@ async def upload_photo(
 
         # Generate presigned URL
         presigned_url = get_storage_service().get_presigned_url(
-            minio_key=photo.storage_key, bucket_name="photos", expiry=timedelta(hours=1)
+            storage_key=photo.storage_key, bucket_name="photos", expiry=timedelta(hours=1)
         )
 
         logger.info(f"✅ Photo {photo.id} uploaded: {file.filename}")
@@ -257,7 +258,7 @@ async def create_redesign(
                 # Use the parent redesign's generated image as input
                 try:
                     input_image_data = get_storage_service().get_file(
-                        minio_key=parent.storage_key, bucket_name=parent.storage_bucket
+                        storage_key=parent.storage_key, bucket_name=parent.storage_bucket
                     )
                     logger.info(f"Using parent redesign {parent.id} image as input for iteration")
                 except Exception as e:
@@ -268,7 +269,7 @@ async def create_redesign(
         # Fall back to original photo if no parent image available
         if input_image_data is None:
             input_image_data = get_storage_service().get_file(
-                minio_key=photo.storage_key, bucket_name=photo.storage_bucket
+                storage_key=photo.storage_key, bucket_name=photo.storage_bucket
             )
 
         # Generate redesign
@@ -333,7 +334,7 @@ async def create_redesign(
 
         # Generate presigned URL
         presigned_url = get_storage_service().get_presigned_url(
-            minio_key=redesign.storage_key, bucket_name="photos", expiry=timedelta(hours=1)
+            storage_key=redesign.storage_key, bucket_name="photos", expiry=timedelta(hours=1)
         )
 
         logger.info(
@@ -406,12 +407,41 @@ async def list_photos(
         )
         redesign_counts = {photo_id: cnt for photo_id, cnt in rows}
 
-    # Build response with presigned URLs and redesign counts
+    # Batch-fetch explicitly promoted redesigns (no fallback — only shown if user promoted)
+    explicit_promoted: dict[int, PhotoRedesign] = {}
+    explicit_ids = [p.promoted_redesign_id for p in photos if p.promoted_redesign_id]
+    if explicit_ids:
+        promoted_rows = db.query(PhotoRedesign).filter(PhotoRedesign.id.in_(explicit_ids)).all()
+        for r in promoted_rows:
+            explicit_promoted[int(r.id)] = r
+
+    # Build response with presigned URLs, redesign counts, and promoted redesign
+    storage = get_storage_service()
     photo_responses = []
     for photo in photos:
-        presigned_url = get_storage_service().get_presigned_url(
-            minio_key=photo.storage_key, bucket_name=photo.storage_bucket, expiry=timedelta(hours=1)
+        presigned_url = storage.get_presigned_url(
+            storage_key=photo.storage_key,
+            bucket_name=photo.storage_bucket,
+            expiry=timedelta(hours=1),
         )
+
+        # Only include promoted redesign if explicitly set
+        promoted_redesign_data = None
+        if photo.promoted_redesign_id and int(photo.promoted_redesign_id) in explicit_promoted:
+            redesign_obj = explicit_promoted[int(photo.promoted_redesign_id)]
+            redesign_url = storage.get_presigned_url(
+                storage_key=redesign_obj.storage_key,
+                bucket_name=redesign_obj.storage_bucket,
+                expiry=timedelta(hours=1),
+            )
+            promoted_redesign_data = PromotedRedesignResponse(
+                id=redesign_obj.id,
+                redesign_uuid=redesign_obj.redesign_uuid,
+                style_preset=redesign_obj.style_preset,
+                prompt=redesign_obj.prompt,
+                presigned_url=redesign_url,
+                created_at=redesign_obj.created_at,
+            )
 
         photo_responses.append(
             PhotoResponse(
@@ -429,6 +459,7 @@ async def list_photos(
                 uploaded_at=photo.uploaded_at,
                 presigned_url=presigned_url,
                 redesign_count=redesign_counts.get(photo.id, 0),
+                promoted_redesign=promoted_redesign_data,
             )
         )
 
@@ -472,7 +503,7 @@ async def list_redesigns(
     redesign_responses = []
     for redesign in redesigns:
         presigned_url = get_storage_service().get_presigned_url(
-            minio_key=redesign.storage_key,
+            storage_key=redesign.storage_key,
             bucket_name=redesign.storage_bucket,
             expiry=timedelta(hours=1),
         )
@@ -587,7 +618,7 @@ async def update_photo(
     db.refresh(photo)
 
     presigned_url = get_storage_service().get_presigned_url(
-        minio_key=photo.storage_key, bucket_name=photo.storage_bucket, expiry=timedelta(hours=1)
+        storage_key=photo.storage_key, bucket_name=photo.storage_bucket, expiry=timedelta(hours=1)
     )
 
     redesign_count = db.query(PhotoRedesign).filter(PhotoRedesign.photo_id == photo.id).count()
@@ -608,3 +639,60 @@ async def update_photo(
         presigned_url=presigned_url,
         redesign_count=redesign_count,
     )
+
+
+@router.patch("/{photo_id}/promote/{redesign_id}")
+async def promote_redesign(
+    photo_id: int,
+    redesign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """Set the promoted redesign for a photo."""
+    locale = get_local(request)
+
+    photo = db.query(Photo).filter(Photo.id == photo_id, Photo.user_id == int(current_user)).first()
+    if not photo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=translate("photo_not_found", locale)
+        )
+
+    redesign = (
+        db.query(PhotoRedesign)
+        .filter(PhotoRedesign.id == redesign_id, PhotoRedesign.photo_id == photo_id)
+        .first()
+    )
+    if not redesign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=translate("redesign_not_found", locale)
+        )
+
+    photo.promoted_redesign_id = redesign_id
+    db.commit()
+
+    logger.info(f"✅ Photo {photo_id} promoted redesign set to {redesign_id}")
+    return {"message": "Redesign promoted", "photo_id": photo_id, "redesign_id": redesign_id}
+
+
+@router.delete("/{photo_id}/promote")
+async def demote_redesign(
+    photo_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """Clear the promoted redesign for a photo (revert to latest default)."""
+    locale = get_local(request)
+
+    photo = db.query(Photo).filter(Photo.id == photo_id, Photo.user_id == int(current_user)).first()
+    if not photo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=translate("photo_not_found", locale)
+        )
+
+    photo.promoted_redesign_id = None
+    db.commit()
+
+    logger.info(f"✅ Photo {photo_id} promoted redesign cleared")
+    return {"message": "Redesign demoted", "photo_id": photo_id}

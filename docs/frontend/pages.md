@@ -55,10 +55,13 @@ Public landing page with:
 
 Protected route showing:
 
-- Property list
+- Property list with synthesis previews (risk level, annual costs)
+- Document count and redesign count per property
 - Quick stats
 - Recent activity
 - Create property button
+
+The dashboard fetches from `/api/properties/with-synthesis` to display enriched property cards with AI analysis summaries alongside basic property information.
 
 ### Properties
 
@@ -68,9 +71,10 @@ Protected route showing:
 
 Property creation form:
 
-- Address input
+- Address input (address, postal code, city, department)
 - Price and surface area
-- Property type selection
+- Property type selection (apartment/house)
+- Rooms, floor, building floors, building year
 
 #### Property Detail (`/[locale]/properties/[id]`)
 
@@ -78,47 +82,75 @@ Property creation form:
 
 Property overview with:
 
-- Property information
+- **Property information** with inline editing (address, postal code, city, department, type, price, surface area, rooms, floor, building floors, building year)
+- **AI Analysis Preview** showing synthesis summary, risk level badge (color-coded), key findings, and recommendations (expandable)
+- **Design Overview** displaying promoted redesigns with before/after toggle
 - Price analysis results
 - Market trend chart
-- Document summary
 - Navigation to sub-pages
 
 ```tsx
-// Dynamic route parameter
-export default function PropertyPage({
-  params
-}: {
-  params: { id: string }
-}) {
-  const propertyId = params.id;
-  // ...
-}
+// Property editing state
+const [editingProperty, setEditingProperty] = useState(false);
+const [editForm, setEditForm] = useState<PropertyUpdate>({});
+
+// Synthesis data loaded separately
+const [synthesis, setSynthesis] = useState<SynthesisData | null>(null);
+
+// Promoted redesigns for design overview
+const [designPhotos, setDesignPhotos] = useState<PhotoWithRedesign[]>([]);
 ```
 
 #### Documents (`/[locale]/properties/[id]/documents`)
 
 **File**: `src/app/[locale]/properties/[id]/documents/page.tsx`
 
-Document management:
+Comprehensive document management with multi-phase processing:
 
-- Bulk upload dropzone
-- Document list with status
-- Classification results
-- Analysis viewer
-- Synthesis summary
+- **Multi-phase upload tracking**: Step indicators showing Upload, Analysis, and Synthesis phases
+- **Bulk upload dropzone** with file progress
+- **Document list** with expandable category cards and per-document details
+- **Multi-select** with floating action bar for bulk operations (bulk delete)
+- **Document renaming** (inline, preserves file extension)
+- **Synthesis dashboard** with:
+  - Risk level and confidence score
+  - Annual cost breakdown (expandable table with inline editing)
+  - One-time cost breakdown (expandable table with inline editing)
+  - Tantiemes management (lot/total tantiemes input, auto-calculated share percentage)
+  - Cross-document themes with evolution tracking
+  - Buyer action items with priority/urgency indicators
+  - Risk factors list
+- **Synthesis regeneration** button
+- **User overrides** preserved across regenerations (cost adjustments, tantiemes)
 
 ```tsx
-// Document upload state
-const [uploading, setUploading] = useState(false);
-const [progress, setProgress] = useState<BulkUploadProgress | null>(null);
+// Multi-phase upload tracking
+const [uploadPhase, setUploadPhase] = useState<'upload' | 'analysis' | 'synthesis'>('upload');
+const [uploadProgress, setUploadProgress] = useState(0);
 
-// Upload handler
-const handleUpload = async (files: FileList) => {
-  setUploading(true);
-  const result = await api.bulkUpload(propertyId, files);
-  pollStatus(result.workflow_id);
-};
+// Synthesis data with full breakdown
+interface FullSynthesisData {
+  annual_cost_breakdown: Record<string, { amount: number; source?: string; note?: string }>;
+  one_time_cost_breakdown: Array<{
+    description: string; amount: number; year: number;
+    cost_type: string; payment_status: string; source: string;
+  }>;
+  cross_document_themes: Array<{
+    theme: string; documents_involved: string[];
+    evolution: string; current_status: string;
+  }>;
+  buyer_action_items: Array<{
+    priority: number; action: string;
+    urgency: string; estimated_cost: number;
+  }>;
+  risk_factors: string[];
+  tantiemes_info: {
+    lot_tantiemes: number; total_tantiemes: number;
+    share_percentage: number;
+  };
+  confidence_score: number;
+  confidence_reasoning: string;
+}
 ```
 
 #### Photos (`/[locale]/properties/[id]/photos`)
@@ -130,6 +162,8 @@ Photo management:
 - Photo upload
 - Gallery view
 - Room type tagging
+- **Promote/demote redesigns**: Select a favorite redesign to feature on the property overview
+- **Promoted badge**: Visual indicator showing which redesign is currently promoted
 - Link to redesign studio
 
 #### Redesign Studio (`/[locale]/properties/[id]/redesign-studio`)

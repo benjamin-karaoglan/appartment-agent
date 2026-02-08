@@ -49,10 +49,14 @@ class Property(Base):
     address: str
     postal_code: str           # Indexed
     city: str
+    department: str
     asking_price: float
     surface_area: float
     property_type: str         # apartment, house
     rooms: int
+    floor: int
+    building_floors: int       # Total floors in the building
+    building_year: int
     created_at: datetime
     updated_at: datetime
 
@@ -73,10 +77,11 @@ class Document(Base):
     property_id: int           # Foreign key
     filename: str
     original_filename: str
-    document_type: str         # pv_ag, diagnostic, tax, charges
+    document_type: str         # pv_ag, diags, taxe_fonciere, charges, other
     status: str                # pending, processing, analyzed, failed
     file_hash: str             # SHA-256 for deduplication
-    storage_path: str          # MinIO/GCS path
+    storage_key: str           # Storage object key (renamed from minio_key)
+    storage_bucket: str        # Storage bucket name (renamed from minio_bucket)
     analysis_result: JSON      # Structured analysis
     created_at: datetime
     updated_at: datetime
@@ -95,13 +100,16 @@ class Photo(Base):
     id: int
     property_id: int
     filename: str
-    storage_path: str
+    storage_key: str           # Storage object key (renamed from minio_key)
+    storage_bucket: str        # Storage bucket name (renamed from minio_bucket)
     room_type: str             # living_room, bedroom, kitchen, etc.
+    promoted_redesign_id: int  # FK to photo_redesigns (featured redesign)
     created_at: datetime
 
     # Relationships
     property: Property
     redesigns: List[PhotoRedesign]
+    promoted_redesign: PhotoRedesign  # The promoted/featured redesign
 
 class PhotoRedesign(Base):
     __tablename__ = "photo_redesigns"
@@ -112,7 +120,8 @@ class PhotoRedesign(Base):
     style: str
     preferences: JSON
     status: str                # pending, generating, completed, failed
-    result_path: str           # Generated image path
+    storage_key: str           # Storage object key (renamed from minio_key)
+    storage_bucket: str        # Storage bucket name (renamed from minio_bucket)
     created_at: datetime
 ```
 
@@ -168,6 +177,7 @@ erDiagram
     Property ||--o{ Photo : has
     Property ||--o| DocumentSummary : has
     Photo ||--o{ PhotoRedesign : has
+    Photo ||--o| PhotoRedesign : promotes
     DVFImport ||--o{ DVFRecord : contains
 
     User {
@@ -185,8 +195,14 @@ erDiagram
         string address
         string postal_code
         string city
+        string department
         float asking_price
         float surface_area
+        string property_type
+        int rooms
+        int floor
+        int building_floors
+        int building_year
     }
 
     Document {
@@ -196,6 +212,8 @@ erDiagram
         string document_type
         string status
         string file_hash
+        string storage_key
+        string storage_bucket
         json analysis_result
     }
 
@@ -203,8 +221,10 @@ erDiagram
         int id PK
         int property_id FK
         string filename
-        string storage_path
+        string storage_key
+        string storage_bucket
         string room_type
+        int promoted_redesign_id FK
     }
 
     PhotoRedesign {
@@ -214,6 +234,8 @@ erDiagram
         string style
         json preferences
         string status
+        string storage_key
+        string storage_bucket
     }
 
     DocumentSummary {
@@ -223,6 +245,8 @@ erDiagram
         float total_annual_cost
         float total_one_time_cost
         string risk_level
+        json synthesis_data
+        json user_overrides
     }
 
     DVFRecord {
@@ -273,7 +297,10 @@ alembic/versions/
 ├── b2c3d4e5f6g7_add_langgraph_fields.py
 ├── 19c3bf31bde4_add_photo_and_photoredesign_models.py
 ├── c4d5e6f7g8h9_add_redesign_uuid_to_photo_redesigns.py
-└── 25ffc9523881_merge_photo_redesign_uuid_heads.py
+├── 25ffc9523881_merge_photo_redesign_uuid_heads.py
+├── i0j1k2l3m4n5_rename_minio_to_storage.py       # Rename minio_key/bucket → storage_key/bucket
+├── j1k2l3m4n5o6_add_promoted_redesign_to_photos.py  # Add promoted_redesign_id FK
+└── k2l3m4n5o6p7_add_building_floors_to_properties.py  # Add building_floors column
 ```
 
 ## Indexes
