@@ -4,7 +4,7 @@ import { getMessages, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { routing } from '@/i18n/routing'
 import { Providers } from '@/components/Providers'
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import '../globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -18,6 +18,10 @@ export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }))
 }
 
+export const viewport: Viewport = {
+  themeColor: '#2563eb',
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale } = await params
   const t = await getTranslations({ locale, namespace: 'metadata' })
@@ -25,6 +29,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: t('title'),
     description: t('description'),
+    manifest: '/manifest.json',
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: 'default',
+      title: 'AppArt Agent',
+    },
+    icons: {
+      icon: '/favicon.ico',
+      apple: '/icons/apple-touch-icon.png',
+    },
     openGraph: {
       title: t('ogTitle'),
       description: t('ogDescription'),

@@ -1,0 +1,29 @@
+{
+  "name": "AppArt Agent - Décisions Immobilières Intelligentes",
+  "short_name": "AppArt Agent",
+  "description": "Plateforme IA pour décisions d'achat immobilier en France",
+  "start_url": "/fr",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#2563eb",
+  "background_color": "#f9fafb",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

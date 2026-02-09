@@ -1,3 +1,10 @@
+const withPWA = require('@ducanh2912/next-pwa').default({
+  dest: 'public',
+  disable: process.env.NODE_ENV === 'development',
+  register: true,
+  skipWaiting: true,
+});
+
 const createNextIntlPlugin = require('next-intl/plugin');
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
@@ -27,4 +34,4 @@ const nextConfig = {
   // - /api/auth/* is handled by Next.js API routes (Better Auth)
 }
 
-module.exports = withNextIntl(nextConfig)
+module.exports = withPWA(withNextIntl(nextConfig))

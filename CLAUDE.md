@@ -40,6 +40,7 @@
 - **Auth**: Better Auth 1.4 with Google OAuth support
 - **i18n**: next-intl (locales: `fr`, `en`, default: `fr`)
 - **Icons**: Lucide React
+- **PWA**: `@ducanh2912/next-pwa` (installable on mobile, disabled in dev)
 - **API client**: Axios (`frontend/src/lib/api.ts`) hitting `NEXT_PUBLIC_API_URL`
 - **Pages**: `frontend/src/app/[locale]/` (dashboard, properties, documents, photos, redesign-studio)
 - **Package manager**: pnpm
@@ -67,6 +68,18 @@ Shared UI components live in `frontend/src/components/ui/`:
 | `StatCard` | Dashboard stat card with icon |
 
 Utility CSS classes are defined in `globals.css` (`btn-primary`, `btn-secondary`, `badge-success`, etc.).
+
+#### PWA (Progressive Web App)
+
+The app is installable on mobile devices via `@ducanh2912/next-pwa`. Configuration is in `next.config.js`:
+
+- **Disabled in development** (`disable: process.env.NODE_ENV === 'development'`)
+- Service worker and Workbox files (`sw.js`, `workbox-*.js`) are generated during `pnpm build` into `public/` and gitignored
+- Manifest at `frontend/public/manifest.json`, icons in `frontend/public/icons/`
+- PWA metadata (viewport, manifest link, apple-web-app) in `frontend/src/app/[locale]/layout.tsx`
+- Stale service workers are auto-unregistered in development via `Providers.tsx`
+
+**Important**: Never commit generated `sw.js` or `workbox-*.js` files. They are build artifacts.
 
 ## Development Setup
 
@@ -103,6 +116,8 @@ Everything runs via Docker Compose. Use the helper script:
 | MinIO      | http://localhost:9000      | Console at http://localhost:9001 |
 
 Database migrations run automatically via the `migrations` service on `docker-compose up`.
+
+**Storage backend**: `docker-compose.yml` defaults to MinIO (`STORAGE_BACKEND=minio`) but respects the `.env` override. If `.env` has `STORAGE_BACKEND=gcs`, the backend uses Google Cloud Storage. After switching backends, flush the Redis presigned URL cache: `docker compose exec redis redis-cli EVAL "local k=redis.call('KEYS','presigned_url:*'); if #k>0 then return redis.call('DEL',unpack(k)) else return 0 end" 0`
 
 ### Running Tests
 
